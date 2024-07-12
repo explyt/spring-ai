@@ -4,21 +4,27 @@
                       https://maven.apache.org/xsd/settings-1.0.0.xsd">
 
     <servers>
-        <server>
-            <id>spring-snapshots</id>
-            <username>${env.ARTIFACTORY_USERNAME}</username>
-            <password>${env.ARTIFACTORY_PASSWORD}</password>
-        </server>
-        <server>
-            <id>spring-staging</id>
-            <username>${env.ARTIFACTORY_USERNAME}</username>
-            <password>${env.ARTIFACTORY_PASSWORD}</password>
-        </server>
-        <server>
-            <id>spring-milestones</id>
-            <username>${env.ARTIFACTORY_USERNAME}</username>
-            <password>${env.ARTIFACTORY_PASSWORD}</password>
-        </server>
+<!--        <server>-->
+<!--            <id>spring-snapshots</id>-->
+<!--            <username>${env.ARTIFACTORY_USERNAME}</username>-->
+<!--            <password>${env.ARTIFACTORY_PASSWORD}</password>-->
+<!--        </server>-->
+<!--        <server>-->
+<!--            <id>spring-staging</id>-->
+<!--            <username>${env.ARTIFACTORY_USERNAME}</username>-->
+<!--            <password>${env.ARTIFACTORY_PASSWORD}</password>-->
+<!--        </server>-->
+<!--        <server>-->
+<!--            <id>spring-milestones</id>-->
+<!--            <username>${env.ARTIFACTORY_USERNAME}</username>-->
+<!--            <password>${env.ARTIFACTORY_PASSWORD}</password>-->
+<!--        </server>-->
+
+<!--		<server>-->
+<!--			<id>sonatype-new</id>-->
+<!--			<username>${env.SONATYPE_USER}</username>-->
+<!--			<password>${env.SONATYPE_PASSWORD}</password>-->
+<!--		</server>-->
     </servers>
 
 </settings>

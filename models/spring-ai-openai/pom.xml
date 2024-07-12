@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>org.springframework.ai</groupId>
 		<artifactId>spring-ai</artifactId>
-		<version>1.0.0-M3</version>
+		<version>${revision}</version>
 		<relativePath>../../pom.xml</relativePath>
 	</parent>
 	<artifactId>spring-ai-openai</artifactId>
@@ -75,18 +75,18 @@
 			<scope>test</scope>
 		</dependency>
 
-		<dependency>
-			<groupId>org.springframework.ai</groupId>
-			<artifactId>spring-ai-qdrant-store</artifactId>
-			<version>${project.version}</version>
-			<exclusions>
-				<exclusion>
-					<groupId>org.springframework.ai</groupId>
-					<artifactId>spring-ai-openai</artifactId>
-				</exclusion>
-			</exclusions>
-			<scope>test</scope>
-		</dependency>
+<!--		<dependency>-->
+<!--			<groupId>org.springframework.ai</groupId>-->
+<!--			<artifactId>spring-ai-qdrant-store</artifactId>-->
+<!--			<version>${project.version}</version>-->
+<!--			<exclusions>-->
+<!--				<exclusion>-->
+<!--					<groupId>org.springframework.ai</groupId>-->
+<!--					<artifactId>spring-ai-openai</artifactId>-->
+<!--				</exclusion>-->
+<!--			</exclusions>-->
+<!--			<scope>test</scope>-->
+<!--		</dependency>-->
 
 		<dependency>
 			<groupId>io.micrometer</groupId>
@@ -117,7 +117,7 @@
             <artifactId>ollama</artifactId>
             <scope>test</scope>
         </dependency>
-		
+
 	</dependencies>
 
 </project>
