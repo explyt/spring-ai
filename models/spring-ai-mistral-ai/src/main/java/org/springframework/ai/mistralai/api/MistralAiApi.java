@@ -59,7 +59,7 @@ import org.springframework.web.reactive.function.client.WebClient;
  */
 public class MistralAiApi {
 
-	private static final String DEFAULT_BASE_URL = "https://api.mistral.ai";
+	public static final String DEFAULT_BASE_URL = "https://api.mistral.ai";
 
 	private static final Predicate<String> SSE_DONE_PREDICATE = "[DONE]"::equals;
 
