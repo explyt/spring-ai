@@ -38,6 +38,7 @@
 *** xref:api/chat/zhipuai-chat.adoc[ZhiPu AI]
 // **** xref:api/chat/functions/zhipuai-chat-functions.adoc[Function Calling]
 *** xref:api/chat/watsonx-ai-chat.adoc[watsonx.AI]
+*** xref:api/chat/deepseek-chat.adoc[DeepSeek]
 ** xref:api/embeddings.adoc[Embedding Models]
 *** xref:api/bedrock.adoc[Amazon Bedrock]
 **** xref:api/embeddings/bedrock-cohere-embedding.adoc[Cohere]
