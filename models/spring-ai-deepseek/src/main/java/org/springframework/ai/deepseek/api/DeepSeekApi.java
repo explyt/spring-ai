@@ -132,7 +132,7 @@ public class DeepSeekApi {
 			return value;
 		}
 
-		@Override public String getModelName() {
+		@Override public String getName() {
 			return value;
 		}
 	}
