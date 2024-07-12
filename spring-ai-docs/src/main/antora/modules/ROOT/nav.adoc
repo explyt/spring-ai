@@ -34,6 +34,7 @@
 *** xref:api/chat/zhipuai-chat.adoc[ZhiPu AI]
 **** xref:api/chat/functions/zhipuai-chat-functions.adoc[Function Calling]
 *** xref:api/chat/watsonx-ai-chat.adoc[Watsonx.AI]
+*** xref:api/chat/deepseek-chat.adoc[DeepSeek]
 ** xref:api/embeddings.adoc[]
 *** xref:api/embeddings/openai-embeddings.adoc[OpenAI]
 *** xref:api/embeddings/ollama-embeddings.adoc[Ollama]
