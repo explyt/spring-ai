@@ -1,16 +1,16 @@
-name: Publish package to the Maven Central Repository and GitHub Packages
+name: Publish package to GitHub Packages
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version (the same as last release version)'
+        description: 'Version'
         required: true
         type: string
   workflow_call:
     inputs:
       version:
-        description: 'Version (the same as last release version)'
+        description: 'Version'
         required: true
         type: string
 
