@@ -65,7 +65,7 @@ public class MistralAiApi {
 
 	public static final String PROVIDER_NAME = AiProvider.MISTRAL_AI.value();
 
-	private static final String DEFAULT_BASE_URL = "https://api.mistral.ai";
+	public static final String DEFAULT_BASE_URL = "https://api.mistral.ai";
 
 	private static final Predicate<String> SSE_DONE_PREDICATE = "[DONE]"::equals;
 
@@ -100,8 +100,7 @@ public class MistralAiApi {
 	 * @param responseErrorHandler Response error handler.
 	 */
 	public MistralAiApi(String baseUrl, String mistralAiApiKey, RestClient.Builder restClientBuilder,
-			ResponseErrorHandler responseErrorHandler) {
-
+			WebClient.Builder webClientBuilder, ResponseErrorHandler responseErrorHandler) {
 		Consumer<HttpHeaders> jsonContentHeaders = headers -> {
 			headers.setBearerAuth(mistralAiApiKey);
 			headers.setContentType(MediaType.APPLICATION_JSON);
@@ -112,7 +111,19 @@ public class MistralAiApi {
 			.defaultStatusHandler(responseErrorHandler)
 			.build();
 
-		this.webClient = WebClient.builder().baseUrl(baseUrl).defaultHeaders(jsonContentHeaders).build();
+		this.webClient = webClientBuilder.baseUrl(baseUrl).defaultHeaders(jsonContentHeaders).build();
+	}
+
+	/**
+	 * Create a new client api.
+	 * @param baseUrl api base URL.
+	 * @param mistralAiApiKey Mistral api Key.
+	 * @param restClientBuilder RestClient builder.
+	 * @param responseErrorHandler Response error handler.
+	 */
+	public MistralAiApi(String baseUrl, String mistralAiApiKey, RestClient.Builder restClientBuilder,
+			ResponseErrorHandler responseErrorHandler) {
+		this(baseUrl, mistralAiApiKey, restClientBuilder, WebClient.builder(), responseErrorHandler);
 	}
 
 	/**
