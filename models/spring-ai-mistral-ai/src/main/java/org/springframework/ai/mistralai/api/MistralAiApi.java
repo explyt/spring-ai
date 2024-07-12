@@ -65,7 +65,7 @@ public class MistralAiApi {
 
 	public static final String PROVIDER_NAME = AiProvider.MISTRAL_AI.value();
 
-	private static final String DEFAULT_BASE_URL = "https://api.mistral.ai";
+	public static final String DEFAULT_BASE_URL = "https://api.mistral.ai";
 
 	private static final Predicate<String> SSE_DONE_PREDICATE = "[DONE]"::equals;
 
