@@ -31,6 +31,6 @@ jobs:
           java-version: 17
           distribution: corretto
       - name: Publish to GitHub Packages
-        run: mvn -Drevision=env.RELEASE_VERSION --batch-mode deploy
+        run: mvn -Drevision=${RELEASE_VERSION} --batch-mode deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
