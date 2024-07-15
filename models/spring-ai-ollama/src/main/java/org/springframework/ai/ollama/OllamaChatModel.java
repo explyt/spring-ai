@@ -15,36 +15,35 @@
  */
 package org.springframework.ai.ollama;
 
-import java.util.Base64;
-import java.util.List;
-
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.ollama.metadata.OllamaChatResponseMetadata;
-import reactor.core.publisher.Flux;
-
-import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.MessageType;
 import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.ModelOptionsUtils;
 import org.springframework.ai.ollama.api.OllamaApi;
 import org.springframework.ai.ollama.api.OllamaApi.Message.Role;
 import org.springframework.ai.ollama.api.OllamaOptions;
+import org.springframework.ai.ollama.metadata.OllamaChatResponseMetadata;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
+import reactor.core.publisher.Flux;
+
+import java.util.Base64;
+import java.util.List;
 
 /**
  * {@link ChatModel} implementation for {@literal Ollama}.
- *
+ * <p>
  * Ollama allows developers to run large language models and generate embeddings locally.
  * It supports open-source models available on [Ollama AI
  * Library](https://ollama.ai/library). - Llama 2 (7B parameters, 3.8GB size) - Mistral
  * (7B parameters, 4.1GB size)
- *
+ * <p>
  * Please refer to the <a href="https://ollama.ai/">official Ollama website</a> for the
  * most up-to-date information on available models.
  *
@@ -91,6 +90,24 @@ public class OllamaChatModel implements ChatModel {
 	public OllamaChatModel withDefaultOptions(OllamaOptions options) {
 		this.defaultOptions = options;
 		return this;
+	}
+
+	public record ModelInformation(String modelName, Integer contextLength) {
+	}
+
+	private ModelInformation getModelInformation(String modelName) {
+		var modelInfo = this.chatApi.show(new OllamaApi.ShowRequest(modelName, false)).modelInfo();
+		for (var entry : modelInfo.entrySet()) {
+			if (entry.getKey().endsWith("context_length")) {
+				var contextLength = Integer.parseInt(entry.getValue());
+				return new ModelInformation(modelName, contextLength);
+			}
+		}
+		return null;
+	}
+
+	public List<ModelInformation> collectModelInformation() {
+		return this.chatApi.tags().models().stream().map(model -> getModelInformation(model.name())).toList();
 	}
 
 	@Override
