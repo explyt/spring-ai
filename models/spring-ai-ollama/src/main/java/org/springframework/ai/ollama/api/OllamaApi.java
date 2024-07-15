@@ -15,22 +15,11 @@
  */
 package org.springframework.ai.ollama.api;
 
-import java.io.IOException;
-import java.time.Duration;
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.function.Consumer;
-
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.ClientHttpResponse;
@@ -39,6 +28,16 @@ import org.springframework.util.StreamUtils;
 import org.springframework.web.client.ResponseErrorHandler;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * Java Client for the Ollama API. https://ollama.ai/
@@ -51,7 +50,7 @@ public class OllamaApi {
 
 	private static final Log logger = LogFactory.getLog(OllamaApi.class);
 
-	private final static String DEFAULT_BASE_URL = "http://localhost:11434";
+	public final static String DEFAULT_BASE_URL = "http://localhost:11434";
 
 	public static final String REQUEST_BODY_NULL_ERROR = "The request body can not be null.";
 
@@ -114,6 +113,95 @@ public class OllamaApi {
 		this.restClient = restClientBuilder.baseUrl(baseUrl).defaultHeaders(defaultHeaders).build();
 
 		this.webClient = WebClient.builder().baseUrl(baseUrl).defaultHeaders(defaultHeaders).build();
+	}
+
+
+	// --------------------------------------------------------------------------
+	// Tags (list of models)
+	// --------------------------------------------------------------------------
+	/**
+	 * An additional details about the model returned from the /tags endpoint.
+	 *
+	 * @param format The format of the model, e.g., "gguf".
+	 * @param family The family of the model, e.g., "llama".
+	 * @param families The families of the model, e.g., ["llama", "llava"].
+	 * @param parameter_size The size of the model, e.g., "2.7B".
+	 * @param quantization_level The quantization level of the model, e.g., "Q4_0".
+	 */
+	@JsonInclude(Include.NON_NULL)
+	public record TagsDetails(
+			@JsonProperty("format") String format,
+			@JsonProperty("family") String family,
+			@JsonProperty("families") List<String> families,
+			@JsonProperty("parameter_size") String parameter_size,
+			@JsonProperty("quantization_level") String quantization_level
+	) {}
+
+	/**
+	 * A model information object returned from the /tags endpoint.
+	 *
+	 * @param name A name of the model.
+	 * @param modified_at The last time the model was modified.
+	 * @param size The size of the model.
+	 * @param digest The digest of the model.
+	 * @param details Additional details about the model.
+	 */
+	@JsonInclude(Include.NON_NULL)
+	public record TagsModel(
+			@JsonProperty("name") String name,
+			@JsonProperty("modified_at") String modified_at,
+			@JsonProperty("size") String size,
+			@JsonProperty("digest") String digest,
+			@JsonProperty("details") TagsDetails details
+	) {}
+
+	/**
+	 * The response object returned from the /tags endpoint.
+	 *
+	 * @param models A list of models that are available locally.
+	 */
+	@JsonInclude(Include.NON_NULL)
+	public record TagsResponse(
+			@JsonProperty("models") List<TagsModel> models
+	) {}
+
+	public TagsResponse tags() {
+		 return this.restClient.get()
+			.uri("/api/tags")
+			.retrieve()
+			.onStatus(this.responseErrorHandler)
+			.body(TagsResponse.class);
+	}
+
+	/**
+	 * The request object for the /show endpoint.
+	 *
+	 * @param name name of the model to show
+	 * @param verbose (optional) if set to `true`, returns full data for verbose response fields
+	 */
+	@JsonInclude(Include.NON_NULL)
+	public record ShowRequest(
+			@JsonProperty("name") String name,
+			@JsonProperty("verbose") Boolean verbose
+	) {}
+
+	/**
+	 * The response object for the /show endpoint.
+	 *
+	 * @param modelInfo llama.cpp model information
+	 */
+	@JsonInclude(Include.NON_NULL)
+	public record ShowResponse(
+			@JsonProperty("model_info") Map<String, String> modelInfo
+	) {}
+
+	public ShowResponse show(ShowRequest request) {
+		return this.restClient.post()
+				.uri("/api/show")
+				.body(request)
+				.retrieve()
+				.onStatus(this.responseErrorHandler)
+				.body(ShowResponse.class);
 	}
 
 	// --------------------------------------------------------------------------
@@ -308,7 +396,7 @@ public class OllamaApi {
 	 */
 	public GenerateResponse generate(GenerateRequest completionRequest) {
 		Assert.notNull(completionRequest, REQUEST_BODY_NULL_ERROR);
-		Assert.isTrue(completionRequest.stream() == false, "Stream mode must be disabled.");
+		Assert.isTrue(!completionRequest.stream(), "Stream mode must be disabled.");
 
 		return this.restClient.post()
 			.uri("/api/generate")
@@ -374,7 +462,7 @@ public class OllamaApi {
 			/**
 			 * Assistant message type. Usually the response from the model.
 			 */
-			@JsonProperty("assistant") ASSISTANT;
+			@JsonProperty("assistant") ASSISTANT
 
 		}
 
