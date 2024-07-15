@@ -17,10 +17,10 @@
 		<module>spring-ai-bom</module>
 		<module>spring-ai-core</module>
 		<module>spring-ai-test</module>
-		<module>spring-ai-spring-boot-autoconfigure</module>
+<!--		<module>spring-ai-spring-boot-autoconfigure</module>-->
 		<module>spring-ai-retry</module>
-		<module>spring-ai-spring-boot-docker-compose</module>
-		<module>spring-ai-spring-boot-testcontainers</module>
+<!--		<module>spring-ai-spring-boot-docker-compose</module>-->
+<!--		<module>spring-ai-spring-boot-testcontainers</module>-->
 		<module>spring-ai-spring-cloud-bindings</module>
 
 <!--		<module>document-readers/pdf-reader</module>-->
@@ -39,7 +39,7 @@
 <!--		<module>vector-stores/spring-ai-oracle-store</module>-->
 <!--		<module>vector-stores/spring-ai-pgvector-store</module>-->
 <!--		<module>vector-stores/spring-ai-pinecone-store</module>-->
-<!--		<module>vector-stores/spring-ai-qdrant-store</module>-->
+		<module>vector-stores/spring-ai-qdrant-store</module>
 <!--		<module>vector-stores/spring-ai-redis-store</module>-->
 <!--		<module>vector-stores/spring-ai-typesense-store</module>-->
 
