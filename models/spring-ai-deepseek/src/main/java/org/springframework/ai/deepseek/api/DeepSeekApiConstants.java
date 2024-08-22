@@ -22,4 +22,6 @@ public class DeepSeekApiConstants {
 
 	public static final String DEFAULT_BASE_URL = "https://api.deepseek.com";
 
+	public static final String BETA_BASE_URL = "https://api.deepseek.com/beta";
+
 }
