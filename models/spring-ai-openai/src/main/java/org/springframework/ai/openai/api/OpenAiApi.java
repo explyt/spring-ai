@@ -18,6 +18,7 @@ package org.springframework.ai.openai.api;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 import org.springframework.ai.model.ChatModelDescription;
@@ -70,6 +71,14 @@ public class OpenAiApi {
 	private final RestClient restClient;
 
 	private final WebClient webClient;
+
+	// @formatter:off
+	private Function<String, ChatCompletionChunk> parser = content -> ModelOptionsUtils.jsonToObject(content, ChatCompletionChunk.class);
+
+	public void setParser(Function<String, ChatCompletionChunk> parser) {
+		this.parser = parser;
+	}
+	// @formatter:on
 
 	/**
 	 * Create a new chat completion api with base URL set to https://api.openai.com
@@ -1053,7 +1062,7 @@ public class OpenAiApi {
 			.takeUntil(SSE_DONE_PREDICATE)
 			// filters out the "[DONE]" message.
 			.filter(SSE_DONE_PREDICATE.negate())
-			.map(content -> ModelOptionsUtils.jsonToObject(content, ChatCompletionChunk.class))
+			.map(parser)
 			// Detect is the chunk is part of a streaming function call.
 			.map(chunk -> {
 				if (this.chunkMerger.isStreamingToolFunctionCall(chunk)) {
