@@ -38,4 +38,8 @@ public class ApiUtils {
 		};
 	}
 
+	public static Consumer<HttpHeaders> getJsonContentHeaders() {
+		return (headers) -> headers.setContentType(MediaType.APPLICATION_JSON);
+	}
+
 }
