@@ -35,4 +35,8 @@ public final class QianFanConstants {
 
 	}
 
+	public static Consumer<HttpHeaders> getJsonContentHeaders() {
+		return (headers) -> headers.setContentType(MediaType.APPLICATION_JSON);
+	}
+
 }
