@@ -13,25 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.springframework.ai.qianfan.api;
+package org.springframework.ai.google.gemini.api;
 
-import org.springframework.ai.observation.conventions.AiProvider;
+public class GoogleGeminiApiConstants {
 
-/**
- * The ApiUtils class provides utility methods for working with API requests and
- * responses.
- *
- * @author Geng Rong
- * @since 1.0
- */
-public class QianFanConstants {
-
-	public static final String DEFAULT_BASE_URL = "https://aip.baidubce.com/rpc/2.0/ai_custom";
-
-	public static final String PROVIDER_NAME = AiProvider.QIANFAN.value();
-
-	public static Consumer<HttpHeaders> getJsonContentHeaders() {
-		return (headers) -> headers.setContentType(MediaType.APPLICATION_JSON);
-	}
+	public static final String DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 
 }
