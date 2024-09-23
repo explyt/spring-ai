@@ -13,25 +13,41 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.springframework.ai.qianfan.api;
+package org.springframework.ai.google.gemini.chat;
 
-import org.springframework.ai.observation.conventions.AiProvider;
+import java.util.List;
 
 /**
- * The ApiUtils class provides utility methods for working with API requests and
- * responses.
- *
  * @author Geng Rong
- * @since 1.0
  */
-public class QianFanConstants {
+public class ActorsFilms {
 
-	public static final String DEFAULT_BASE_URL = "https://aip.baidubce.com/rpc/2.0/ai_custom";
+	private String actor;
 
-	public static final String PROVIDER_NAME = AiProvider.QIANFAN.value();
+	private List<String> movies;
 
-	public static Consumer<HttpHeaders> getJsonContentHeaders() {
-		return (headers) -> headers.setContentType(MediaType.APPLICATION_JSON);
+	public ActorsFilms() {
+	}
+
+	public String getActor() {
+		return actor;
+	}
+
+	public void setActor(String actor) {
+		this.actor = actor;
+	}
+
+	public List<String> getMovies() {
+		return movies;
+	}
+
+	public void setMovies(List<String> movies) {
+		this.movies = movies;
+	}
+
+	@Override
+	public String toString() {
+		return "ActorsFilms{" + "actor='" + actor + '\'' + ", movies=" + movies + '}';
 	}
 
 }
