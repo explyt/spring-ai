@@ -31,4 +31,8 @@ public class QianFanConstants {
 
 	public static final String PROVIDER_NAME = AiProvider.QIANFAN.value();
 
+	public static Consumer<HttpHeaders> getJsonContentHeaders() {
+		return (headers) -> headers.setContentType(MediaType.APPLICATION_JSON);
+	}
+
 }

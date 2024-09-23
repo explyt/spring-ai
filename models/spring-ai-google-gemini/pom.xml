@@ -8,10 +8,10 @@
 		<version>${revision}</version>
 		<relativePath>../../pom.xml</relativePath>
 	</parent>
-	<artifactId>spring-ai-deepseek</artifactId>
+	<artifactId>spring-ai-google-gemini</artifactId>
 	<packaging>jar</packaging>
-	<name>Spring AI Model - DeepSeek</name>
-	<description>DeepSeek support</description>
+	<name>Spring AI Model - Google Gemini</name>
+	<description>Google Gemini support</description>
 	<url>https://github.com/spring-projects/spring-ai</url>
 
 	<scm>
