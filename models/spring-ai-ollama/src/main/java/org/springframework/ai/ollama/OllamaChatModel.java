@@ -15,6 +15,8 @@
  */
 package org.springframework.ai.ollama;
 
+import java.util.ArrayList;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
@@ -120,6 +122,18 @@ public class OllamaChatModel extends AbstractToolCallSupport implements ChatMode
 		this.chatApi = chatApi;
 		this.defaultOptions = defaultOptions;
 		this.observationRegistry = observationRegistry;
+	}
+
+	public record ModelInformation(OllamaApi.Model model, Map<String, Object> modelInfo) {
+	}
+
+	private ModelInformation getModelInformation(OllamaApi.Model model) {
+		var modelInfo = this.chatApi.showModel(new OllamaApi.ShowModelRequest(model.name(), false)).modelInfo();
+		return new ModelInformation(model, modelInfo);
+	}
+
+	public List<ModelInformation> collectModelInformation() {
+		return this.chatApi.listModels().models().stream().map(this::getModelInformation).toList();
 	}
 
 	@Override

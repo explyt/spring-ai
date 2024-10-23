@@ -18,11 +18,22 @@ package org.springframework.ai.ollama.api;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 
+import com.fasterxml.jackson.core.JacksonException;
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.ai.model.ModelOptionsUtils;
@@ -36,6 +47,8 @@ import org.springframework.util.StreamUtils;
 import org.springframework.web.client.ResponseErrorHandler;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
@@ -56,7 +69,7 @@ public class OllamaApi {
 
 	private static final Log logger = LogFactory.getLog(OllamaApi.class);
 
-	private static final String DEFAULT_BASE_URL = "http://localhost:11434";
+	public static final String DEFAULT_BASE_URL = "http://localhost:11434";
 
 	public static final String PROVIDER_NAME = AiProvider.OLLAMA.value();
 
@@ -100,7 +113,7 @@ public class OllamaApi {
 	 * @param baseUrl The base url of the Ollama server.
 	 */
 	public OllamaApi(String baseUrl) {
-		this(baseUrl, RestClient.builder(), WebClient.builder());
+		this(baseUrl, RestClient.builder(), WebClient.builder(), new OllamaResponseErrorHandler());
 	}
 
 	/**
@@ -109,9 +122,9 @@ public class OllamaApi {
 	 * @param baseUrl The base url of the Ollama server.
 	 * @param restClientBuilder The {@link RestClient.Builder} to use.
 	 */
-	public OllamaApi(String baseUrl, RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder) {
+	public OllamaApi(String baseUrl, RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder, ResponseErrorHandler errorHandler) {
 
-		this.responseErrorHandler = new OllamaResponseErrorHandler();
+		this.responseErrorHandler = errorHandler;
 
 		Consumer<HttpHeaders> defaultHeaders = headers -> {
 			headers.setContentType(MediaType.APPLICATION_JSON);
@@ -541,7 +554,7 @@ public class OllamaApi {
 				}
 			}
 		}
-		
+
 		public static Builder builder(String model) {
 			return new Builder(model);
 		}
@@ -716,7 +729,7 @@ public class OllamaApi {
 		public EmbeddingsRequest(String model, String input) {
 			this(model, List.of(input), null, null, null);
 		}
-	}	
+	}
 
 	/**
 	 * Generate embeddings from a model.
@@ -761,13 +774,92 @@ public class OllamaApi {
 	/**
 	 * The response object returned from the /embedding endpoint.
 	 * @param model The model used for generating the embeddings.
-	 * @param embeddings The list of embeddings generated from the model. 
+	 * @param embeddings The list of embeddings generated from the model.
 	 * Each embedding (list of doubles) corresponds to a single input text.
 	 */
 	@JsonInclude(Include.NON_NULL)
 	public record EmbeddingsResponse(
 			@JsonProperty("model") String model,
 			@JsonProperty("embeddings") List<float[]> embeddings) {
+	}
+
+	@JsonInclude(Include.NON_NULL)
+	public record Model(
+			@JsonProperty("name") String name,
+			@JsonProperty("model") String model,
+			@JsonProperty("modified_at") Instant modifiedAt,
+			@JsonProperty("size") Long size,
+			@JsonProperty("digest") String digest,
+			@JsonProperty("details") Details details
+	) {
+		@JsonInclude(Include.NON_NULL)
+		public record Details(
+				@JsonProperty("parent_model") String parentModel,
+				@JsonProperty("format") String format,
+				@JsonProperty("family") String family,
+				@JsonProperty("families") List<String> families,
+				@JsonProperty("parameter_size") String parameterSize,
+				@JsonProperty("quantization_level") String quantizationLevel
+		) { }
+	}
+
+	@JsonInclude(Include.NON_NULL)
+	public record ListModelResponse(
+			@JsonProperty("models") List<Model> models
+	) { }
+
+	@JsonInclude(Include.NON_NULL)
+	public record ShowModelRequest(
+			@JsonProperty("model") String model,
+			@JsonProperty("system") String system,
+			@JsonProperty("verbose") Boolean verbose,
+			@JsonProperty("options") Map<String, Object> options
+	) {
+		public ShowModelRequest(String model) {
+			this(model, null, null, null);
+		}
+
+		public ShowModelRequest(String model, Boolean verbose) {
+			this(model, null, verbose, null);
+		}
+	}
+
+	@JsonInclude(Include.NON_NULL)
+	public record ShowModelResponse(
+			@JsonProperty("license") String license,
+			@JsonProperty("modelfile") String modelfile,
+			@JsonProperty("parameters") String parameters,
+			@JsonProperty("template") String template,
+			@JsonProperty("system") String system,
+			@JsonProperty("details") Model.Details details,
+			@JsonProperty("messages") List<Message> messages,
+			@JsonProperty("model_info") Map<String, Object> modelInfo,
+			@JsonProperty("projector_info") Map<String, Object> projectorInfo,
+			@JsonProperty("modified_at") Instant modifiedAt
+	) { }
+
+	/**
+	 * List models that are available locally on the machine where Ollama is running.
+	 */
+	public ListModelResponse listModels() {
+		return this.restClient.get()
+				.uri("/api/tags")
+				.retrieve()
+				.onStatus(this.responseErrorHandler)
+				.body(ListModelResponse.class);
+	}
+
+	/**
+	 * Show information about a model available locally on the machine where Ollama is running.
+	 */
+	public ShowModelResponse showModel(ShowModelRequest showModelRequest) {
+		Assert.notNull(showModelRequest, "showModelRequest must not be null");
+		return this.restClient.post()
+				.uri("/api/show")
+				.body(showModelRequest)
+				.retrieve()
+				.onStatus(this.responseErrorHandler)
+				.body(ShowModelResponse.class);
 	}
 
 	/**
