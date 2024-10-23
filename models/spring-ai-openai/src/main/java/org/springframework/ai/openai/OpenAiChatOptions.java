@@ -97,6 +97,8 @@ public class OpenAiChatOptions implements FunctionCallingOptions, ChatOptions {
 	 * appear in the text so far, increasing the model's likelihood to talk about new topics.
 	 */
 	private @JsonProperty("presence_penalty") Double presencePenalty;
+
+	private @JsonProperty("reasoning_effort") String reasoningEffort;
 	/**
 	 * An object specifying the format that the model must output. Setting to { "type":
 	 * "json_object" } enables JSON mode, which guarantees the message the model generates is valid JSON.
@@ -441,6 +443,14 @@ public class OpenAiChatOptions implements FunctionCallingOptions, ChatOptions {
 		this.presencePenalty = presencePenalty;
 	}
 
+	public String getReasoningEffort() {
+		return this.reasoningEffort;
+	}
+
+	public void setReasoningEffort(String reasoningEffort) {
+		this.reasoningEffort = reasoningEffort;
+	}
+
 	public ResponseFormat getResponseFormat() {
 		return this.responseFormat;
 	}
@@ -623,10 +633,10 @@ public class OpenAiChatOptions implements FunctionCallingOptions, ChatOptions {
 	@Override
 	public int hashCode() {
 		return Objects.hash(this.model, this.frequencyPenalty, this.logitBias, this.logprobs, this.topLogprobs,
-				this.maxTokens, this.maxCompletionTokens, this.n, this.presencePenalty, this.responseFormat,
-				this.streamOptions, this.seed, this.stop, this.temperature, this.topP, this.tools, this.toolChoice,
-				this.user, this.parallelToolCalls, this.functionCallbacks, this.functions, this.httpHeaders,
-				this.proxyToolCalls, this.toolContext);
+				this.maxTokens, this.maxCompletionTokens, this.n, this.presencePenalty, this.reasoningEffort,
+				this.responseFormat, this.streamOptions, this.seed, this.stop, this.temperature, this.topP, this.tools,
+				this.toolChoice, this.user, this.parallelToolCalls, this.functionCallbacks, this.functions,
+				this.httpHeaders, this.proxyToolCalls, this.toolContext);
 	}
 
 	@Override
@@ -640,6 +650,7 @@ public class OpenAiChatOptions implements FunctionCallingOptions, ChatOptions {
 				&& Objects.equals(this.logitBias, other.logitBias) && Objects.equals(this.logprobs, other.logprobs)
 				&& Objects.equals(this.topLogprobs, other.topLogprobs)
 				&& Objects.equals(this.maxTokens, other.maxTokens)
+				&& Objects.equals(this.reasoningEffort, other.reasoningEffort)
 				&& Objects.equals(this.maxCompletionTokens, other.maxCompletionTokens)
 				&& Objects.equals(this.n, other.n) && Objects.equals(this.presencePenalty, other.presencePenalty)
 				&& Objects.equals(this.responseFormat, other.responseFormat)

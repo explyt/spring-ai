@@ -18,6 +18,8 @@ package org.springframework.ai.openai.api;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 import org.springframework.ai.model.ChatModelDescription;
@@ -70,6 +72,15 @@ public class OpenAiApi {
 	private final RestClient restClient;
 
 	private final WebClient webClient;
+
+	// @formatter:off
+	private Function<String, ChatCompletionChunk> parser =
+		content -> ModelOptionsUtils.jsonToObject(content, ChatCompletionChunk.class);
+
+	public void setParser(Function<String, ChatCompletionChunk> parser) {
+		this.parser = parser;
+	}
+	// @formatter:on
 
 	/**
 	 * Create a new chat completion api with base URL set to https://api.openai.com
@@ -447,6 +458,7 @@ public class OpenAiApi {
 			@JsonProperty("max_completion_tokens") Integer maxCompletionTokens,
 			@JsonProperty("n") Integer n,
 			@JsonProperty("presence_penalty") Double presencePenalty,
+			@JsonProperty("reasoning_effort") String reasoningEffort,
 			@JsonProperty("response_format") ResponseFormat responseFormat,
 			@JsonProperty("seed") Integer seed,
 			@JsonProperty("stop") List<String> stop,
@@ -468,7 +480,7 @@ public class OpenAiApi {
 		 */
 		public ChatCompletionRequest(List<ChatCompletionMessage> messages, String model, Double temperature) {
 			this(messages, model, null, null, null, null, null, null, null, null,
-					null, null, null, false, null, temperature, null,
+					null, null, null, null, false, null, temperature, null,
 					null, null, null, null);
 		}
 
@@ -483,7 +495,7 @@ public class OpenAiApi {
 		 */
 		public ChatCompletionRequest(List<ChatCompletionMessage> messages, String model, Double temperature, boolean stream) {
 			this(messages, model, null, null, null, null, null, null, null, null,
-					null, null, null, stream, null, temperature, null,
+					null, null, null, null, stream, null, temperature, null,
 					null, null, null,  null);
 		}
 
@@ -499,7 +511,7 @@ public class OpenAiApi {
 		public ChatCompletionRequest(List<ChatCompletionMessage> messages, String model,
 				List<FunctionTool> tools, Object toolChoice) {
 			this(messages, model, null, null, null, null, null, null, null, null,
-					null, null, null, false, null, 0.8, null,
+					null, null, null, null, false, null, 0.8, null,
 					tools, toolChoice, null, null);
 		}
 
@@ -512,7 +524,7 @@ public class OpenAiApi {
 		 */
 		public ChatCompletionRequest(List<ChatCompletionMessage> messages, Boolean stream) {
 			this(messages, null, null, null, null, null, null, null, null,
-					null, null, null, null, stream, null, null, null,
+					null, null, null, null, null, stream, null, null, null,
 					null, null, null, null);
 		}
 
@@ -524,7 +536,7 @@ public class OpenAiApi {
 		 */
 		public ChatCompletionRequest withStreamOptions(StreamOptions streamOptions) {
 			return new ChatCompletionRequest(messages, model, frequencyPenalty, logitBias, logprobs, topLogprobs, maxTokens, maxCompletionTokens, n, presencePenalty,
-					responseFormat, seed, stop, stream, streamOptions, temperature, topP,
+					reasoningEffort, responseFormat, seed, stop, stream, streamOptions, temperature, topP,
 					tools, toolChoice, parallelToolCalls, user);
 		}
 
@@ -559,7 +571,7 @@ public class OpenAiApi {
 		public record ResponseFormat(
 				@JsonProperty("type") Type type,
 				@JsonProperty("json_schema") JsonSchema jsonSchema ) {
-			
+
 			public enum Type {
 				/**
 				 * Generates a text response. (default)
@@ -1079,7 +1091,7 @@ public class OpenAiApi {
 			.takeUntil(SSE_DONE_PREDICATE)
 			// filters out the "[DONE]" message.
 			.filter(SSE_DONE_PREDICATE.negate())
-			.map(content -> ModelOptionsUtils.jsonToObject(content, ChatCompletionChunk.class))
+			.map(parser)
 			// Detect is the chunk is part of a streaming function call.
 			.map(chunk -> {
 				if (this.chunkMerger.isStreamingToolFunctionCall(chunk)) {
