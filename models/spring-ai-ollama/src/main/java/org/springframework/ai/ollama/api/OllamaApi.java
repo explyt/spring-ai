@@ -18,11 +18,19 @@ package org.springframework.ai.ollama.api;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 
+import com.fasterxml.jackson.core.JacksonException;
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.JsonDeserializer;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.ai.model.ModelOptionsUtils;
@@ -38,13 +46,12 @@ import org.springframework.util.StreamUtils;
 import org.springframework.web.client.ResponseErrorHandler;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
-
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 
 /**
  * Java Client for the Ollama API. <a href="https://ollama.ai/">https://ollama.ai</a>
@@ -58,7 +65,7 @@ public class OllamaApi {
 
 	private static final Log logger = LogFactory.getLog(OllamaApi.class);
 
-	private static final String DEFAULT_BASE_URL = "http://localhost:11434";
+	public static final String DEFAULT_BASE_URL = "http://localhost:11434";
 
 	public static final String PROVIDER_NAME = AiProvider.OLLAMA.value();
 
@@ -102,7 +109,7 @@ public class OllamaApi {
 	 * @param baseUrl The base url of the Ollama server.
 	 */
 	public OllamaApi(String baseUrl) {
-		this(baseUrl, RestClient.builder(), WebClient.builder());
+		this(baseUrl, RestClient.builder(), WebClient.builder(), new OllamaResponseErrorHandler());
 	}
 
 	/**
@@ -111,9 +118,9 @@ public class OllamaApi {
 	 * @param baseUrl The base url of the Ollama server.
 	 * @param restClientBuilder The {@link RestClient.Builder} to use.
 	 */
-	public OllamaApi(String baseUrl, RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder) {
+	public OllamaApi(String baseUrl, RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder, ResponseErrorHandler errorHandler) {
 
-		this.responseErrorHandler = new OllamaResponseErrorHandler();
+		this.responseErrorHandler = errorHandler;
 
 		Consumer<HttpHeaders> defaultHeaders = headers -> {
 			headers.setContentType(MediaType.APPLICATION_JSON);
@@ -321,7 +328,7 @@ public class OllamaApi {
 	@Deprecated(since = "1.0.0-M2", forRemoval = true)
 	public GenerateResponse generate(GenerateRequest completionRequest) {
 		Assert.notNull(completionRequest, REQUEST_BODY_NULL_ERROR);
-		Assert.isTrue(completionRequest.stream() == false, "Stream mode must be disabled.");
+		Assert.isTrue(!completionRequest.stream(), "Stream mode must be disabled.");
 
 		return this.restClient.post()
 			.uri("/api/generate")
@@ -543,7 +550,7 @@ public class OllamaApi {
 				}
 			}
 		}
-		
+
 		public static Builder builder(String model) {
 			return new Builder(model);
 		}
@@ -858,6 +865,10 @@ public class OllamaApi {
 	) {
 		public ShowModelRequest(String model) {
 			this(model, null, null, null);
+		}
+
+		public ShowModelRequest(String model, Boolean verbose) {
+			this(model, null, verbose, null);
 		}
 	}
 
