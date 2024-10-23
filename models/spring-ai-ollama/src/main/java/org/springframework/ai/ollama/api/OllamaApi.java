@@ -19,12 +19,20 @@ package org.springframework.ai.ollama.api;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
+import com.fasterxml.jackson.core.JacksonException;
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -45,6 +53,8 @@ import org.springframework.util.StreamUtils;
 import org.springframework.web.client.ResponseErrorHandler;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 /**
  * Java Client for the Ollama API. <a href="https://ollama.ai/">https://ollama.ai</a>
@@ -62,7 +72,7 @@ public class OllamaApi {
 
 	private static final Log logger = LogFactory.getLog(OllamaApi.class);
 
-	private static final String DEFAULT_BASE_URL = "http://localhost:11434";
+	public static final String DEFAULT_BASE_URL = "http://localhost:11434";
 
 	private final ResponseErrorHandler responseErrorHandler;
 
@@ -82,7 +92,7 @@ public class OllamaApi {
 	 * @param baseUrl The base url of the Ollama server.
 	 */
 	public OllamaApi(String baseUrl) {
-		this(baseUrl, RestClient.builder(), WebClient.builder());
+		this(baseUrl, RestClient.builder(), WebClient.builder(), new OllamaResponseErrorHandler());
 	}
 
 	/**
@@ -91,9 +101,9 @@ public class OllamaApi {
 	 * @param baseUrl The base url of the Ollama server.
 	 * @param restClientBuilder The {@link RestClient.Builder} to use.
 	 */
-	public OllamaApi(String baseUrl, RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder) {
+	public OllamaApi(String baseUrl, RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder, ResponseErrorHandler errorHandler) {
 
-		this.responseErrorHandler = new OllamaResponseErrorHandler();
+		this.responseErrorHandler = errorHandler;
 
 		Consumer<HttpHeaders> defaultHeaders = headers -> {
 			headers.setContentType(MediaType.APPLICATION_JSON);
@@ -680,6 +690,10 @@ public class OllamaApi {
 	) {
 		public ShowModelRequest(String model) {
 			this(model, null, null, null);
+		}
+
+		public ShowModelRequest(String model, Boolean verbose) {
+			this(model, null, verbose, null);
 		}
 	}
 
