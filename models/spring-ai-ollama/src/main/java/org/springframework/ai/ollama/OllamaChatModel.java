@@ -16,6 +16,7 @@
 
 package org.springframework.ai.ollama;
 
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
@@ -105,6 +106,12 @@ public class OllamaChatModel extends AbstractToolCallSupport implements ChatMode
 		initializeModel(defaultOptions.getModel(), modelManagementOptions.pullModelStrategy());
 	}
 
+	public OllamaChatModel(OllamaApi ollamaApi, OllamaOptions defaultOptions,
+			FunctionCallbackContext functionCallbackContext) {
+		this(ollamaApi, defaultOptions, functionCallbackContext, List.of(), ObservationRegistry.NOOP,
+				ModelManagementOptions.defaults());
+	}
+
 	public static Builder builder() {
 		return new Builder();
 	}
@@ -123,6 +130,18 @@ public class OllamaChatModel extends AbstractToolCallSupport implements ChatMode
 			.withKeyValue("total-duration", response.totalDuration())
 			.withKeyValue("done", response.done())
 			.build();
+	}
+
+	public record ModelInformation(OllamaApi.Model model, Map<String, Object> modelInfo) {
+	}
+
+	private ModelInformation getModelInformation(OllamaApi.Model model) {
+		var modelInfo = this.chatApi.showModel(new OllamaApi.ShowModelRequest(model.name(), false)).modelInfo();
+		return new ModelInformation(model, modelInfo);
+	}
+
+	public List<ModelInformation> collectModelInformation() {
+		return this.chatApi.listModels().models().stream().map(this::getModelInformation).toList();
 	}
 
 	@Override
