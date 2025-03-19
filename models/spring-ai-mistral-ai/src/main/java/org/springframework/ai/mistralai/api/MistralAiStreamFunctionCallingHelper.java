@@ -56,13 +56,14 @@ public class MistralAiStreamFunctionCallingHelper {
 		Long created = (current.created() != null ? current.created() : previous.created());
 		String model = (current.model() != null ? current.model() : previous.model());
 		String object = (current.object() != null ? current.object() : previous.object());
+		var usage = (current.usage() != null ? current.usage() : previous.usage());
 
 		ChunkChoice previousChoice0 = (CollectionUtils.isEmpty(previous.choices()) ? null : previous.choices().get(0));
 		ChunkChoice currentChoice0 = (CollectionUtils.isEmpty(current.choices()) ? null : current.choices().get(0));
 
 		ChunkChoice choice = merge(previousChoice0, currentChoice0);
 
-		return new ChatCompletionChunk(id, object, created, model, List.of(choice));
+		return new ChatCompletionChunk(id, object, created, model, List.of(choice), usage);
 	}
 
 	private ChunkChoice merge(ChunkChoice previous, ChunkChoice current) {

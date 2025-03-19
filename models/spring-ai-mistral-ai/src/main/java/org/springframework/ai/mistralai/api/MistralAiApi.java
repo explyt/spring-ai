@@ -27,6 +27,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.ai.observation.conventions.AiProvider;
+import org.springframework.ai.mistralai.MistralAiFIMOptions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -121,6 +122,18 @@ public class MistralAiApi {
 	public MistralAiApi(String baseUrl, String mistralAiApiKey, RestClient.Builder restClientBuilder,
 			ResponseErrorHandler responseErrorHandler) {
 		this(baseUrl, mistralAiApiKey, restClientBuilder, WebClient.builder(), responseErrorHandler);
+	}
+
+	public ResponseEntity<ChatCompletion> fimCompletionEntity(FIMCompletionRequest fimRequest) {
+
+		Assert.notNull(fimRequest, "The request body can not be null.");
+		Assert.isTrue(!fimRequest.stream(), "Request must set the stream property to false.");
+
+		return this.restClient.post()
+			.uri("/v1/fim/completions")
+			.body(fimRequest)
+			.retrieve()
+			.toEntity(ChatCompletion.class);
 	}
 
 	/**
@@ -304,6 +317,26 @@ public class MistralAiApi {
 			 @JsonProperty("model") String model,
 			 @JsonProperty("usage") Usage usage) {
 		 // @formatter:on
+	}
+
+	@JsonInclude(Include.NON_NULL)
+	public record FIMCompletionRequest(
+	// @formatter:off
+			@JsonProperty("model") String model,
+			@JsonProperty("temperature") Double temperature,
+			@JsonProperty("top_p") Double topP,
+			@JsonProperty("max_tokens") Integer maxTokens,
+			@JsonProperty("stream") Boolean stream,
+			@JsonProperty("stop") List<String> stop,
+			@JsonProperty("random_seed") Integer randomSeed,
+			@JsonProperty("prompt") String prompt,
+			@JsonProperty("suffix") String suffix,
+			@JsonProperty("min_tokens") Integer minTokens
+	) {
+		public FIMCompletionRequest(MistralAiFIMOptions options, Boolean stream, String prompt, String suffix) {
+			this(options.getModel(), options.getTemperature(), options.getTopP(), options.getMaxTokens(), stream, options.getStop(), options.getRandomSeed(), prompt, suffix, options.getMinTokens());
+		}
+		// @formatter:on
 	}
 
 	/**
@@ -710,7 +743,9 @@ public class MistralAiApi {
 		 @JsonProperty("object") String object,
 		 @JsonProperty("created") Long created,
 		 @JsonProperty("model") String model,
-		 @JsonProperty("choices") List<ChunkChoice> choices) {
+		 @JsonProperty("choices") List<ChunkChoice> choices,
+		 @JsonProperty("usage") Usage usage
+	) {
 		 // @formatter:on
 
 		/**
@@ -851,7 +886,8 @@ public class MistralAiApi {
 				return !isInsideTool.get();
 			})
 			.concatMapIterable(window -> {
-				Mono<ChatCompletionChunk> mono1 = window.reduce(new ChatCompletionChunk(null, null, null, null, null),
+				Mono<ChatCompletionChunk> mono1 = window.reduce(
+						new ChatCompletionChunk(null, null, null, null, null, null),
 						(previous, current) -> this.chunkMerger.merge(previous, current));
 				return List.of(mono1);
 			})

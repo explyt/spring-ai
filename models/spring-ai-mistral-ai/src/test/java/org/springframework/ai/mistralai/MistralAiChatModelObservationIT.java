@@ -178,7 +178,7 @@ public class MistralAiChatModelObservationIT {
 		@Bean
 		public MistralAiChatModel openAiChatModel(MistralAiApi mistralAiApi,
 				TestObservationRegistry observationRegistry) {
-			return new MistralAiChatModel(mistralAiApi, MistralAiChatOptions.builder().build(),
+			return new MistralAiChatModel(mistralAiApi, MistralAiChatOptions.builder().build(), null,
 					new FunctionCallbackContext(), List.of(), RetryTemplate.defaultInstance(), observationRegistry);
 		}
 

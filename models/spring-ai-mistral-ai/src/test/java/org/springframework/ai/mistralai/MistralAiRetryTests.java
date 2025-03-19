@@ -142,7 +142,7 @@ public class MistralAiRetryTests {
 		var choice = new ChatCompletionChunk.ChunkChoice(0, new ChatCompletionMessage("Response", Role.ASSISTANT),
 				ChatCompletionFinishReason.STOP, null);
 		ChatCompletionChunk expectedChatCompletion = new ChatCompletionChunk("id", "chat.completion.chunk", 789l,
-				"model", List.of(choice));
+				"model", List.of(choice), new MistralAiApi.Usage(1, 2, 3));
 
 		when(mistralAiApi.chatCompletionStream(isA(ChatCompletionRequest.class)))
 			.thenThrow(new TransientAiException("Transient Error 1"))

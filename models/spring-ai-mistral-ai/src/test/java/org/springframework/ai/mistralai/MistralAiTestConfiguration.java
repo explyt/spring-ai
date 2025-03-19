@@ -43,7 +43,8 @@ public class MistralAiTestConfiguration {
 	@Bean
 	public MistralAiChatModel mistralAiChatModel(MistralAiApi mistralAiApi) {
 		return new MistralAiChatModel(mistralAiApi,
-				MistralAiChatOptions.builder().withModel(MistralAiApi.ChatModel.OPEN_MIXTRAL_7B.getValue()).build());
+				MistralAiChatOptions.builder().withModel(MistralAiApi.ChatModel.OPEN_MIXTRAL_7B.getValue()).build(),
+				null);
 	}
 
 }

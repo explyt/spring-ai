@@ -32,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @EnabledIfEnvironmentVariable(named = "MISTRAL_AI_API_KEY", matches = ".+")
 public class MistralAiChatCompletionRequestTest {
 
-	MistralAiChatModel chatModel = new MistralAiChatModel(new MistralAiApi("test"));
+	MistralAiChatModel chatModel = new MistralAiChatModel(new MistralAiApi("test"), null, null);
 
 	@Test
 	void chatCompletionDefaultRequestTest() {
