@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.util.List;
 
 import io.micrometer.observation.ObservationRegistry;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -47,6 +48,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * @author Thomas Vitale
  * @since 1.0.0
  */
+@Disabled("For manual smoke testing only")
 @ExtendWith(MockitoExtension.class)
 class OllamaChatModelTests {
 
@@ -169,6 +171,13 @@ class OllamaChatModelTests {
 		assertEquals(Integer.valueOf(99), metadata.get("eval-count"));
 		assertEquals(Integer.valueOf(66), metadata.get("prompt-eval-count"));
 
+	}
+
+	@Test
+	void test() {
+		var chatModel = OllamaChatModel.builder().ollamaApi(this.ollamaApi).build();
+		var models = chatModel.collectModelInformation();
+		assert !models.isEmpty();
 	}
 
 }
