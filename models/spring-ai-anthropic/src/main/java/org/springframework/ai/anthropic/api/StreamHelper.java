@@ -61,11 +61,10 @@ public class StreamHelper {
 	}
 
 	public boolean isToolUseFinish(StreamEvent event) {
-
-		if (event == null || event.type() == null || event.type() != EventType.CONTENT_BLOCK_STOP) {
-			return false;
-		}
-		return true;
+		// Tool use streaming sequence ends with a CONTENT_BLOCK_STOP event.
+		// The logic relies on the state machine (isInsideTool flag) managed in
+		// chatCompletionStream to know if this stop event corresponds to a tool use.
+		return event != null && event.type() != null && event.type() == EventType.CONTENT_BLOCK_STOP;
 	}
 
 	public StreamEvent mergeToolUseEvents(StreamEvent previousEvent, StreamEvent event) {
@@ -76,8 +75,7 @@ public class StreamHelper {
 			ContentBlockStartEvent contentBlockStart = (ContentBlockStartEvent) event;
 
 			if (ContentBlock.Type.TOOL_USE.getValue().equals(contentBlockStart.contentBlock().type())) {
-				ContentBlockStartEvent.ContentBlockToolUse cbToolUse = (ContentBlockToolUse) contentBlockStart
-					.contentBlock();
+				ContentBlockToolUse cbToolUse = (ContentBlockToolUse) contentBlockStart.contentBlock();
 
 				return eventAggregator.withIndex(contentBlockStart.index())
 					.withId(cbToolUse.id())
@@ -135,28 +133,44 @@ public class StreamHelper {
 		else if (event.type().equals(EventType.CONTENT_BLOCK_START)) {
 			ContentBlockStartEvent contentBlockStartEvent = (ContentBlockStartEvent) event;
 
-			Assert.isTrue(contentBlockStartEvent.contentBlock().type().equals("text"),
-					"The json content block should have been aggregated. Unsupported content block type: "
-							+ contentBlockStartEvent.contentBlock().type());
-
-			ContentBlockText contentBlockText = (ContentBlockText) contentBlockStartEvent.contentBlock();
-			ContentBlock contentBlock = new ContentBlock(Type.TEXT, null, contentBlockText.text(),
-					contentBlockStartEvent.index());
-			contentBlockReference.get().withType(event.type().name()).withContent(List.of(contentBlock));
+			if (contentBlockStartEvent.contentBlock() instanceof ContentBlockText textBlock) {
+				ContentBlock cb = new ContentBlock(Type.TEXT, null, textBlock.text(), contentBlockStartEvent.index());
+				contentBlockReference.get().withType(event.type().name()).withContent(List.of(cb));
+			}
+			else if (contentBlockStartEvent
+				.contentBlock() instanceof ContentBlockStartEvent.ContentBlockThinking thinkingBlock) {
+				ContentBlock cb = new ContentBlock(Type.THINKING, null, null, contentBlockStartEvent.index(), null,
+						null, null, null, null, null, thinkingBlock.thinking(), null);
+				contentBlockReference.get().withType(event.type().name()).withContent(List.of(cb));
+			}
+			else {
+				throw new IllegalArgumentException(
+						"Unsupported content block type: " + contentBlockStartEvent.contentBlock().type());
+			}
 		}
 		else if (event.type().equals(EventType.CONTENT_BLOCK_DELTA)) {
 
 			ContentBlockDeltaEvent contentBlockDeltaEvent = (ContentBlockDeltaEvent) event;
 
-			Assert.isTrue(contentBlockDeltaEvent.delta().type().equals("text_delta"),
-					"The json content block delta should have been aggregated. Unsupported content block type: "
-							+ contentBlockDeltaEvent.delta().type());
-
-			ContentBlockDeltaText deltaTxt = (ContentBlockDeltaText) contentBlockDeltaEvent.delta();
-
-			var contentBlock = new ContentBlock(Type.TEXT_DELTA, null, deltaTxt.text(), contentBlockDeltaEvent.index());
-
-			contentBlockReference.get().withType(event.type().name()).withContent(List.of(contentBlock));
+			if (contentBlockDeltaEvent.delta() instanceof ContentBlockDeltaText txt) {
+				ContentBlock cb = new ContentBlock(Type.TEXT_DELTA, null, txt.text(), contentBlockDeltaEvent.index());
+				contentBlockReference.get().withType(event.type().name()).withContent(List.of(cb));
+			}
+			else if (contentBlockDeltaEvent
+				.delta() instanceof ContentBlockDeltaEvent.ContentBlockDeltaThinking thinking) {
+				ContentBlock cb = new ContentBlock(Type.THINKING_DELTA, null, null, contentBlockDeltaEvent.index(),
+						null, null, null, null, null, null, thinking.thinking(), null);
+				contentBlockReference.get().withType(event.type().name()).withContent(List.of(cb));
+			}
+			else if (contentBlockDeltaEvent.delta() instanceof ContentBlockDeltaEvent.ContentBlockDeltaSignature sig) {
+				ContentBlock cb = new ContentBlock(Type.SIGNATURE_DELTA, null, null, contentBlockDeltaEvent.index(),
+						null, null, null, null, null, sig.signature(), null, null);
+				contentBlockReference.get().withType(event.type().name()).withContent(List.of(cb));
+			}
+			else {
+				throw new IllegalArgumentException(
+						"Unsupported content block delta type: " + contentBlockDeltaEvent.delta().type());
+			}
 		}
 		else if (event.type().equals(EventType.MESSAGE_DELTA)) {
 
