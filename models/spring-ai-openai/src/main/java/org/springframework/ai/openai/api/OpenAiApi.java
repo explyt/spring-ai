@@ -1507,6 +1507,10 @@ public class OpenAiApi {
 			throw new IllegalStateException("The content is not a string!");
 		}
 
+		public String reasoningContent() {
+			return reasoningContent;
+		}
+
 		/**
 		 * The role of the author of this message.
 		 */
