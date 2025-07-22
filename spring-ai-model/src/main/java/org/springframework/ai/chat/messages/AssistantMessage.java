@@ -41,7 +41,6 @@ public class AssistantMessage extends AbstractMessage implements MediaContent {
 
 	private final String reasoningContent;
 
-
 	protected final List<Media> media;
 
 	public AssistantMessage(String content) {
