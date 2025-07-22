@@ -40,8 +40,13 @@ public class AssistantMessage extends AbstractMessage implements MediaContent {
 
 	private final List<ToolCall> toolCalls;
 
+	private final String reasoningContent;
+
 	protected final List<Media> media;
 
+	/**
+	 * @deprecated in favor of {@link AssistantMessage#builder()}.
+	 */
 	public AssistantMessage(String content) {
 		this(content, Map.of());
 	}
@@ -50,6 +55,10 @@ public class AssistantMessage extends AbstractMessage implements MediaContent {
 	 * @deprecated in favor of {@link AssistantMessage#builder()}.
 	 */
 	@Deprecated
+	public AssistantMessage(String content, String reasoningContent) {
+		this(content, reasoningContent, Map.of());
+	}
+
 	public AssistantMessage(String content, Map<String, Object> properties) {
 		this(content, properties, List.of());
 	}
@@ -58,6 +67,13 @@ public class AssistantMessage extends AbstractMessage implements MediaContent {
 	 * @deprecated in favor of {@link AssistantMessage#builder()}.
 	 */
 	@Deprecated
+	public AssistantMessage(String content, String reasoningContent, Map<String, Object> properties) {
+		this(content, reasoningContent, properties, List.of());
+	}
+
+	/**
+	 * @deprecated in favor of {@link AssistantMessage#builder()}.
+	 */
 	public AssistantMessage(String content, Map<String, Object> properties, List<ToolCall> toolCalls) {
 		this(content, properties, toolCalls, List.of());
 	}
@@ -66,13 +82,27 @@ public class AssistantMessage extends AbstractMessage implements MediaContent {
 	 * @deprecated in favor of {@link AssistantMessage#builder()}.
 	 */
 	@Deprecated
+	public AssistantMessage(String content, String reasoningContent, Map<String, Object> properties,
+			List<ToolCall> toolCalls) {
+		this(content, reasoningContent, properties, toolCalls, List.of());
+	}
+
+	/**
+	 * @deprecated in favor of {@link AssistantMessage#builder()}.
+	 */
 	public AssistantMessage(String content, Map<String, Object> properties, List<ToolCall> toolCalls,
 			List<Media> media) {
+		this(content, "", properties, toolCalls, media);
+	}
+
+	public AssistantMessage(String content, String reasoningContent, Map<String, Object> properties,
+			List<ToolCall> toolCalls, List<Media> media) {
 		super(MessageType.ASSISTANT, content, properties);
 		Assert.notNull(toolCalls, "Tool calls must not be null");
 		Assert.notNull(media, "Media must not be null");
 		this.toolCalls = toolCalls;
 		this.media = media;
+		this.reasoningContent = reasoningContent;
 	}
 
 	public List<ToolCall> getToolCalls() {
@@ -99,7 +129,8 @@ public class AssistantMessage extends AbstractMessage implements MediaContent {
 		if (!super.equals(o)) {
 			return false;
 		}
-		return Objects.equals(this.toolCalls, that.toolCalls) && Objects.equals(this.media, that.media);
+		return Objects.equals(this.toolCalls, that.toolCalls) && Objects.equals(this.media, that.media)
+				&& Objects.equals(this.reasoningContent, that.reasoningContent);
 	}
 
 	@Override
@@ -110,7 +141,12 @@ public class AssistantMessage extends AbstractMessage implements MediaContent {
 	@Override
 	public String toString() {
 		return "AssistantMessage [messageType=" + this.messageType + ", toolCalls=" + this.toolCalls + ", textContent="
-				+ this.textContent + ", metadata=" + this.metadata + "]";
+				+ this.textContent + ", metadata=" + this.metadata + ", reasoningContent=" + this.reasoningContent
+				+ "]";
+	}
+
+	public String getReasoningContent() {
+		return reasoningContent;
 	}
 
 	public static Builder builder() {
@@ -125,6 +161,8 @@ public class AssistantMessage extends AbstractMessage implements MediaContent {
 
 		private String content;
 
+		private String reasoningContent;
+
 		private Map<String, Object> properties = Map.of();
 
 		private List<ToolCall> toolCalls = List.of();
@@ -136,6 +174,11 @@ public class AssistantMessage extends AbstractMessage implements MediaContent {
 
 		public Builder content(String content) {
 			this.content = content;
+			return this;
+		}
+
+		public Builder reasoningContent(String reasoningContent) {
+			this.reasoningContent = reasoningContent;
 			return this;
 		}
 
@@ -155,7 +198,8 @@ public class AssistantMessage extends AbstractMessage implements MediaContent {
 		}
 
 		public AssistantMessage build() {
-			return new AssistantMessage(this.content, this.properties, this.toolCalls, this.media);
+			return new AssistantMessage(this.content, this.reasoningContent, this.properties, this.toolCalls,
+					this.media);
 		}
 
 	}
