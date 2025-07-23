@@ -1328,7 +1328,8 @@ public class OpenAiApi {
 			@JsonProperty("refusal") String refusal,
 			@JsonProperty("audio") AudioOutput audioOutput,
 			@JsonProperty("annotations") List<Annotation> annotations,
-			@JsonProperty("reasoning_content") String reasoningContent
+			@JsonProperty("reasoning_content") String reasoningContent,
+			@JsonProperty("reasoning") String reasoning
 	) { // @formatter:on
 
 		/**
@@ -1338,7 +1339,7 @@ public class OpenAiApi {
 		 * @param role The role of the author of this message.
 		 */
 		public ChatCompletionMessage(Object content, Role role) {
-			this(content, role, null, null, null, null, null, null, null);
+			this(content, role, null, null, null, null, null, null, null, null);
 		}
 
 		/**
@@ -1355,7 +1356,7 @@ public class OpenAiApi {
 		}
 
 		public String reasoningContent() {
-			return reasoningContent;
+			return reasoningContent == null ? reasoning : reasoningContent;
 		}
 
 		/**
