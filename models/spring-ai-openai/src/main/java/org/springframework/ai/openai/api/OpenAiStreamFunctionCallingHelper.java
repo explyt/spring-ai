@@ -101,8 +101,8 @@ public class OpenAiStreamFunctionCallingHelper {
 	private ChatCompletionMessage merge(ChatCompletionMessage previous, ChatCompletionMessage current) {
 		String content = (current.content() != null ? current.content()
 				: "" + ((previous.content() != null) ? previous.content() : ""));
-		String reasoningContent = (current.reasoningContent() != null ? current.reasoningContent()
-				: "" + ((previous.reasoningContent() != null) ? previous.reasoningContent() : ""));
+		String reasoningContent = (current.reasoning() != null ? current.reasoning()
+				: "" + ((previous.reasoning() != null) ? previous.reasoning() : ""));
 		Role role = (current.role() != null ? current.role() : previous.role());
 		role = (role != null ? role : Role.ASSISTANT); // default to ASSISTANT (if null
 		String name = (current.name() != null ? current.name() : previous.name());
