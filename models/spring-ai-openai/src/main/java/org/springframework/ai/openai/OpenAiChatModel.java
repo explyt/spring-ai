@@ -426,7 +426,7 @@ public class OpenAiChatModel implements ChatModel {
 
 		List<Media> media = new ArrayList<>();
 		String textContent = choice.message().content();
-		String reasoningContent = choice.message().reasoningContent();
+		String reasoningContent = choice.message().reasoning();
 		var audioOutput = choice.message().audioOutput();
 		if (audioOutput != null) {
 			String mimeType = String.format("audio/%s", request.audioParameters().format().name().toLowerCase());
@@ -607,8 +607,9 @@ public class OpenAiChatModel implements ChatModel {
 					audioOutput = new AudioOutput(assistantMessage.getMedia().get(0).getId(), null, null, null);
 
 				}
-				return List.of(new ChatCompletionMessage(assistantMessage.getText(),
-						ChatCompletionMessage.Role.ASSISTANT, null, null, toolCalls, null, audioOutput, null, assistantMessage.getReasoningContent()));
+				return List
+					.of(new ChatCompletionMessage(assistantMessage.getText(), ChatCompletionMessage.Role.ASSISTANT,
+							null, null, toolCalls, null, audioOutput, null, assistantMessage.getReasoningContent()));
 			}
 			else if (message.getMessageType() == MessageType.TOOL) {
 				ToolResponseMessage toolMessage = (ToolResponseMessage) message;

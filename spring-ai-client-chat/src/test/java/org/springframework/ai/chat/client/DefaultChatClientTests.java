@@ -1395,8 +1395,8 @@ class DefaultChatClientTests {
 		ChatModel chatModel = mock(ChatModel.class);
 		TestObservationRegistry observationRegistry = TestObservationRegistry.create();
 		ArgumentCaptor<Prompt> promptCaptor = ArgumentCaptor.forClass(Prompt.class);
-		given(chatModel.stream(promptCaptor.capture()))
-			.willReturn(Flux.just(new ChatResponse(List.of(new Generation(new AssistantMessage("response"))))));
+		given(chatModel.stream(promptCaptor.capture())).willReturn(Flux.just(new ChatResponse(List
+			.of(new Generation(AssistantMessage.builder().content("response").reasoningContent(null).build())))));
 
 		ChatClient chatClient = new DefaultChatClientBuilder(chatModel, observationRegistry, null).build();
 		DefaultChatClient.DefaultChatClientRequestSpec chatClientRequestSpec = (DefaultChatClient.DefaultChatClientRequestSpec) chatClient

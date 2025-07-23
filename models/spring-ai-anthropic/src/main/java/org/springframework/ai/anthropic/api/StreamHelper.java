@@ -131,6 +131,8 @@ public class StreamHelper {
 		// https://docs.anthropic.com/claude/reference/messages-streaming
 
 		if (event.type().equals(EventType.MESSAGE_START)) {
+			contentBlockReference.set(new ChatCompletionResponseBuilder());
+
 			MessageStartEvent messageStartEvent = (MessageStartEvent) event;
 
 			contentBlockReference.get()

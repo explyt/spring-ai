@@ -1435,7 +1435,7 @@ public class OpenAiApi {
 			@JsonProperty("refusal") String refusal,
 			@JsonProperty("audio") AudioOutput audioOutput,
 			@JsonProperty("annotations") List<Annotation> annotations,
-			@JsonProperty("reasoning_content") String reasoningContent
+			@JsonProperty("reasoning") String reasoning
 	) { // @formatter:on
 
 		/**
@@ -1459,10 +1459,6 @@ public class OpenAiApi {
 				return text;
 			}
 			throw new IllegalStateException("The content is not a string!");
-		}
-
-		public String reasoningContent() {
-			return reasoningContent;
 		}
 
 		/**
