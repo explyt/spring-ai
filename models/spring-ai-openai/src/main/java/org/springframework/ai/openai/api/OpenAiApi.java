@@ -1481,7 +1481,8 @@ public class OpenAiApi {
 			@JsonProperty("refusal") String refusal,
 			@JsonProperty("audio") AudioOutput audioOutput,
 			@JsonProperty("annotations") List<Annotation> annotations,
-			@JsonProperty("reasoning") String reasoning
+       		@JsonProperty(value = "reasoning_content", access = JsonProperty.Access.WRITE_ONLY) String reasoningContent,
+			@JsonProperty(value = "reasoning", access = JsonProperty.Access.WRITE_ONLY) String reasoning
 	) { // @formatter:on
 
 		/**
@@ -1491,7 +1492,7 @@ public class OpenAiApi {
 		 * @param role The role of the author of this message.
 		 */
 		public ChatCompletionMessage(Object content, Role role) {
-			this(content, role, null, null, null, null, null, null, null);
+			this(content, role, null, null, null, null, null, null, null, null);
 		}
 
 		/**
@@ -1505,6 +1506,10 @@ public class OpenAiApi {
 				return text;
 			}
 			throw new IllegalStateException("The content is not a string!");
+		}
+
+		public String getReasoningContent() {
+			return reasoningContent == null ? reasoning : reasoningContent;
 		}
 
 		/**
