@@ -15,21 +15,20 @@
  */
 package org.springframework.ai.google.gemini;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.tool.ToolCallback;
-import org.springframework.ai.tool.function.FunctionToolCallback;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Chat completions options for the Google Gemini chat API.
- * <a href="https://ai.google.dev/gemini-api/docs/text-generation">Google
+ * <a href="https://ai.google.dev/api/generate-content#v1beta.GenerationConfig">Google
  * Gemini chat completion</a>
  */
 @JsonInclude(Include.NON_NULL)
@@ -38,17 +37,20 @@ public class GoogleGeminiChatOptions implements ToolCallingChatOptions {
 	/**
 	 * Collection of {@link ToolCallback}s to be used for tool calling in the chat completion requests.
 	 */
-	private List<ToolCallback> toolCallbacks;
+	@JsonIgnore
+	private List<ToolCallback> toolCallbacks = new ArrayList<>();
 
 	/**
 	 * Collection of tool names to be resolved at runtime and used for tool calling in the chat completion requests.
 	 */
-	private Set<String> toolNames;
+	@JsonIgnore
+	private Set<String> toolNames = new HashSet<>();
 
 	/**
 	 * Optional context map for tool execution.
 	 */
-	private Map<String, Object> toolContext;
+	@JsonIgnore
+	private Map<String, Object> toolContext = new HashMap<>();
 
 	/**
 	 * ID of the model to use
@@ -100,15 +102,17 @@ public class GoogleGeminiChatOptions implements ToolCallingChatOptions {
 
 	private @JsonProperty("topK") Integer topK;
 
-	// @formatter:on
-
+	@JsonIgnore
+	private Boolean internalToolExecutionEnabled;
 
 	@Override
+	@JsonIgnore
 	public List<ToolCallback> getToolCallbacks() {
 		return this.toolCallbacks != null ? this.toolCallbacks : List.of();
 	}
 
 	@Override
+	@JsonIgnore
 	public void setToolCallbacks(List<ToolCallback> toolCallbacks) {
 		Assert.notNull(toolCallbacks, "toolCallbacks cannot be null");
 		Assert.noNullElements(toolCallbacks, "toolCallbacks cannot contain null elements");
@@ -116,11 +120,14 @@ public class GoogleGeminiChatOptions implements ToolCallingChatOptions {
 	}
 
 	@Override
+	@JsonIgnore
 	public Set<String> getToolNames() {
 		return this.toolNames != null ? this.toolNames : Set.of();
 	}
 
+
 	@Override
+	@JsonIgnore
 	public void setToolNames(Set<String> toolNames) {
 		Assert.notNull(toolNames, "toolNames cannot be null");
 		Assert.noNullElements(toolNames, "toolNames cannot contain null elements");
@@ -129,21 +136,25 @@ public class GoogleGeminiChatOptions implements ToolCallingChatOptions {
 	}
 
 	@Override
+	@Nullable
+	@JsonIgnore
 	public Boolean getInternalToolExecutionEnabled() {
-		// Not yet implemented for Gemini, return null for now
-		return null;
+		return this.internalToolExecutionEnabled;
 	}
 
+	@JsonIgnore
 	@Override
-	public void setInternalToolExecutionEnabled(Boolean internalToolExecutionEnabled) {
-		// Not yet implemented for Gemini
+	public void setInternalToolExecutionEnabled(@Nullable Boolean internalToolExecutionEnabled) {
+		this.internalToolExecutionEnabled = internalToolExecutionEnabled;
 	}
 
+	@JsonIgnore
 	@Override
 	public Map<String, Object> getToolContext() {
 		return this.toolContext != null ? this.toolContext : Map.of();
 	}
 
+	@JsonIgnore
 	@Override
 	public void setToolContext(Map<String, Object> toolContext) {
 		this.toolContext = toolContext;

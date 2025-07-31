@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.springframework.ai.google.gemini.api.tool;
+package org.springframework.ai.google.gemini.api;
 
 import com.fasterxml.jackson.annotation.JsonClassDescription;
 import com.fasterxml.jackson.annotation.JsonInclude;

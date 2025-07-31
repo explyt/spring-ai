@@ -28,7 +28,6 @@ import org.springframework.ai.google.gemini.GoogleGeminiChatOptions;
 import org.springframework.ai.google.gemini.api.GoogleGeminiApi.ChatCompletion;
 import org.springframework.ai.google.gemini.api.GoogleGeminiApi.ChatCompletionMessage;
 import org.springframework.ai.google.gemini.api.GoogleGeminiApi.ChatCompletionRequest;
-import org.springframework.ai.google.gemini.api.tool.MockWeatherService;
 import org.springframework.ai.tool.function.FunctionToolCallback;
 import org.springframework.http.ResponseEntity;
 

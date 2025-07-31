@@ -97,8 +97,13 @@ public class GoogleGeminiApi {
 	 * @param apiKey            Google Gemini apiKey.
 	 * @param restClientBuilder RestClient builder.
 	 */
-	public GoogleGeminiApi(String baseUrl, String chatModel, String apiKey, RestClient.Builder restClientBuilder,
-			WebClient.Builder webClientBuilder) {
+	public GoogleGeminiApi(
+			String baseUrl,
+			String chatModel,
+			String apiKey,
+			RestClient.Builder restClientBuilder,
+			WebClient.Builder webClientBuilder
+	) {
 		this(baseUrl, chatModel, apiKey, restClientBuilder, webClientBuilder,
 				RetryUtils.DEFAULT_RESPONSE_ERROR_HANDLER);
 	}
@@ -111,8 +116,14 @@ public class GoogleGeminiApi {
 	 * @param restClientBuilder    RestClient builder.
 	 * @param responseErrorHandler Response error handler.
 	 */
-	public GoogleGeminiApi(String baseUrl, String chatModel, String apiKey, RestClient.Builder restClientBuilder,
-			WebClient.Builder webClientBuilder, ResponseErrorHandler responseErrorHandler) {
+	public GoogleGeminiApi(
+			String baseUrl,
+			String chatModel,
+			String apiKey,
+			RestClient.Builder restClientBuilder,
+			WebClient.Builder webClientBuilder,
+			ResponseErrorHandler responseErrorHandler
+	) {
 
 		this.chatModel = chatModel;
 
@@ -198,32 +209,38 @@ public class GoogleGeminiApi {
 			throw new IllegalArgumentException("Part union type violation: only one of text, inlineData, functionCall, functionResponse, fileData, executableCode, codeExecutionResult can be non-null");
 		}
 	}
-		// Convenience constructor for text only
 		public Part(String text) {
 			this(false, null, text, null, null, null, null, null, null, null);
 		}
 
-		// Convenience constructor for text and thought
-		public Part(String text, Boolean thought) {
-			this(thought, null, text, null, null, null, null, null, null, null);
-		}
-
-		// Convenience constructor for text and thought
 		public Part(FunctionCall functionCall) {
 			this(false, null, null, null, functionCall, null, null, null, null, null);
 		}
 
-		// Convenience constructor for text and thought
 		public Part(FunctionResponse functionResponse) {
 			this(false, null, null, null, null, functionResponse, null, null, null, null);
 		}
 
 		@JsonInclude(Include.NON_NULL)
-		public static record FunctionCall(
-			@JsonProperty("id") String id, // TODO: why NULL?? create our own?
+		public record FunctionCall(
+			@JsonProperty("id") String id,
 			@JsonProperty("name") String name,
 			@JsonProperty("args") Object args
-		) {}
+		) {
+			public FunctionCall(String id, String name, Object args) {
+				this.id = id == null ? "explyt" + java.util.UUID.randomUUID() : id;
+				this.name = name;
+				this.args = args;
+			}
+
+			@com.fasterxml.jackson.annotation.JsonCreator
+			public static FunctionCall create(
+					@com.fasterxml.jackson.annotation.JsonProperty("id") String id,
+					@com.fasterxml.jackson.annotation.JsonProperty("name") String name,
+					@com.fasterxml.jackson.annotation.JsonProperty("args") Object args) {
+				return new FunctionCall(id, name, args);
+			}
+		}
 
 		@JsonInclude(Include.NON_NULL)
 		public static record FunctionResponse(

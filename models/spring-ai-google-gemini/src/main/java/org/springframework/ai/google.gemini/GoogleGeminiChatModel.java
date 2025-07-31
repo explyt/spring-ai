@@ -15,9 +15,9 @@
  */
 package org.springframework.ai.google.gemini;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,29 +36,23 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.google.gemini.api.GoogleGeminiApi;
 import org.springframework.ai.google.gemini.api.GoogleGeminiApi.ChatCompletion;
 import org.springframework.ai.google.gemini.api.GoogleGeminiApi.ChatCompletionRequest;
-import org.springframework.ai.model.tool.ToolCallingManager;
-import org.springframework.ai.model.tool.ToolExecutionEligibilityPredicate;
-import org.springframework.ai.model.tool.DefaultToolExecutionEligibilityPredicate;
-import org.springframework.ai.model.tool.ToolExecutionResult;
-import org.springframework.ai.model.tool.ToolCallingChatOptions;
+import org.springframework.ai.model.ModelOptionsUtils;
+import org.springframework.ai.model.tool.*;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.ai.google.gemini.metadata.GoogleGeminiUsage;
-import org.springframework.ai.google.gemini.api.schema.GeminiToolCallingManager;
 import org.springframework.ai.retry.RetryUtils;
 import org.springframework.http.ResponseEntity;
 import org.springframework.retry.support.RetryTemplate;
 import org.springframework.util.Assert;
 import reactor.core.publisher.Flux;
 
-import java.util.HashMap;
-
 import java.util.*;
-import java.util.stream.Stream;
+
 
 /**
  * @author Geng Rong
  */
-
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class GoogleGeminiChatModel implements ChatModel, StreamingChatModel {
 
 	private static final Logger logger = LoggerFactory.getLogger(GoogleGeminiChatModel.class);
@@ -81,7 +75,7 @@ public class GoogleGeminiChatModel implements ChatModel, StreamingChatModel {
 	/**
 	 * Tool calling manager for function/tool call support.
 	 */
-	private final GeminiToolCallingManager toolCallingManager;
+	private final ToolCallingManager toolCallingManager;
 
 	/**
 	 * Predicate to determine if tool execution is required.
@@ -104,10 +98,16 @@ public class GoogleGeminiChatModel implements ChatModel, StreamingChatModel {
 	}
 
 	public GoogleGeminiChatModel(GoogleGeminiApi api, GoogleGeminiChatOptions options, RetryTemplate retryTemplate) {
-		this(api, options, new GeminiToolCallingManager(ToolCallingManager.builder().build()), retryTemplate, new DefaultToolExecutionEligibilityPredicate());
+		this(api, options, ToolCallingManager.builder().build(), retryTemplate, new DefaultToolExecutionEligibilityPredicate());
 	}
 
-	public GoogleGeminiChatModel(GoogleGeminiApi api, GoogleGeminiChatOptions options, GeminiToolCallingManager toolCallingManager, RetryTemplate retryTemplate, ToolExecutionEligibilityPredicate toolExecutionEligibilityPredicate) {
+	public GoogleGeminiChatModel(
+			GoogleGeminiApi api,
+			GoogleGeminiChatOptions options,
+			ToolCallingManager toolCallingManager,
+			RetryTemplate retryTemplate,
+			ToolExecutionEligibilityPredicate toolExecutionEligibilityPredicate
+	) {
 		Assert.notNull(api, "GoogleGeminiApi must not be null");
 		Assert.notNull(options, "Options must not be null");
 		Assert.notNull(toolCallingManager, "ToolCallingManager must not be null");
@@ -120,7 +120,16 @@ public class GoogleGeminiChatModel implements ChatModel, StreamingChatModel {
 		this.toolExecutionEligibilityPredicate = toolExecutionEligibilityPredicate;
 	}
 
-	private ObjectMapper jacksonObjectMapper = new ObjectMapper();
+	private final ObjectMapper jacksonObjectMapper = new ObjectMapper();
+
+	private Map<String, Object> readJsonValue(String value) {
+		try {
+			return jacksonObjectMapper.readValue(value, new TypeReference<HashMap<String, Object>>() {
+			});
+		} catch (JsonProcessingException e) {
+			throw new RuntimeException(e);
+		}
+	}
 
 	private AssistantMessage createAssistantMessageFromCandidate(GoogleGeminiApi.Candidate choice) {
 		String message = null;
@@ -149,7 +158,7 @@ public class GoogleGeminiChatModel implements ChatModel, StreamingChatModel {
 					}).toList();
 		}
 
-		return new AssistantMessage(message, Collections.emptyMap(), functionCalls);
+		return new AssistantMessage(message != null ? message : "", "", Collections.emptyMap(), functionCalls);
 	}
 
 	@Override
@@ -241,114 +250,147 @@ public class GoogleGeminiChatModel implements ChatModel, StreamingChatModel {
 	 * Accessible for testing.
 	 */
 	ChatCompletionRequest createRequest(Prompt prompt) {
-		GoogleGeminiChatOptions options = null;
+		// Process runtime options
+		GoogleGeminiChatOptions runtimeOptions = null;
 		if (prompt.getOptions() != null) {
-			if (prompt.getOptions() instanceof GoogleGeminiChatOptions googleGeminiChatOptions) {
-				options = googleGeminiChatOptions;
+			if (prompt.getOptions() instanceof ToolCallingChatOptions toolCallingChatOptions) {
+				runtimeOptions = ModelOptionsUtils.copyToTarget(toolCallingChatOptions, ToolCallingChatOptions.class,
+						GoogleGeminiChatOptions.class);
+			} else {
+				runtimeOptions = ModelOptionsUtils.copyToTarget(prompt.getOptions(), ChatOptions.class,
+						GoogleGeminiChatOptions.class);
 			}
-
 		}
-		// TODO: WHY MERGILKA EATS MY TOOLS?
-//        if (this.defaultOptions != null) {
-//            options = ModelOptionsUtils.merge(options, this.defaultOptions, GoogleGeminiChatOptions.class);
-//        }
+
+		// Define request options by merging runtime options and default options
+		GoogleGeminiChatOptions requestOptions = ModelOptionsUtils.merge(runtimeOptions, this.defaultOptions,
+				GoogleGeminiChatOptions.class);
+
+		// Merge @JsonIgnore-annotated options explicitly since they are ignored by
+		// Jackson, used by ModelOptionsUtils.
+		if (runtimeOptions != null) {
+			requestOptions.setInternalToolExecutionEnabled(
+					ModelOptionsUtils.mergeOption(runtimeOptions.getInternalToolExecutionEnabled(),
+							this.defaultOptions.getInternalToolExecutionEnabled()));
+			requestOptions.setToolNames(ToolCallingChatOptions.mergeToolNames(runtimeOptions.getToolNames(),
+					this.defaultOptions.getToolNames()));
+			requestOptions.setToolCallbacks(ToolCallingChatOptions.mergeToolCallbacks(runtimeOptions.getToolCallbacks(),
+					this.defaultOptions.getToolCallbacks()));
+			requestOptions.setToolContext(ToolCallingChatOptions.mergeToolContext(runtimeOptions.getToolContext(),
+					this.defaultOptions.getToolContext()));
+		} else {
+			requestOptions.setInternalToolExecutionEnabled(this.defaultOptions.getInternalToolExecutionEnabled());
+			requestOptions.setToolNames(this.defaultOptions.getToolNames());
+			requestOptions.setToolCallbacks(this.defaultOptions.getToolCallbacks());
+			requestOptions.setToolContext(this.defaultOptions.getToolContext());
+		}
+
+		ToolCallingChatOptions.validateToolCallbacks(requestOptions.getToolCallbacks());
 
 		// Add tool definitions if present
-		List<ToolDefinition> toolDefinitions = this.toolCallingManager != null /* && options instanceof ToolCallingChatOptions toolOptions */
-				? this.toolCallingManager.resolveToolDefinitions(options)
+		List<ToolDefinition> toolDefinitions = this.toolCallingManager != null
+				? this.toolCallingManager.resolveToolDefinitions(requestOptions)
 				: List.of();
 
 		ChatCompletionRequest request;
 		if (!toolDefinitions.isEmpty()) {
-			// Convert ToolDefinition to Gemini Tool format
-			List<GoogleGeminiApi.FunctionDeclaration> functionDeclarations = toolDefinitions.stream()
-				.map(td -> new GoogleGeminiApi.FunctionDeclaration(
-					td.name(),
-					td.description(),
-					org.springframework.ai.model.ModelOptionsUtils.jsonToMap(td.inputSchema())
-				))
-				.toList();
-
-			List<GoogleGeminiApi.ChatCompletionMessage> chatCompletionMessages = prompt.getInstructions().stream()
-				.filter(i -> i.getMessageType() != MessageType.SYSTEM)
-				.map(msg -> {
-					if (msg instanceof AssistantMessage assistantMessage) {
-						Collection<GoogleGeminiApi.Part.FunctionCall> toolCalls = assistantMessage.hasToolCalls()
-							? assistantMessage
-							.getToolCalls()
-							.stream()
-							.map(call -> {
-								try {
-									return new GoogleGeminiApi.Part.FunctionCall(
-										call.id(),
-										call.name(),
-											jacksonObjectMapper.readValue(call.arguments(), new TypeReference<HashMap<String, String>>() {}
-										)
-									);
-								} catch (JsonProcessingException e) {
-									throw new RuntimeException(e);
-								}
-							}).toList()
-							: Collections.emptyList();
-
-						List<GoogleGeminiApi.Part> parts = new ArrayList<>();
-
-						for (GoogleGeminiApi.Part.FunctionCall call : toolCalls) {
-							parts.add(new GoogleGeminiApi.Part(call));
-						}
-
-						GoogleGeminiApi.ChatCompletionMessage message = new GoogleGeminiApi.ChatCompletionMessage(GoogleGeminiApi.ChatCompletionMessage.Role.ASSISTANT, parts);
-
-						return message;
-					} else if (msg instanceof UserMessage userMessage) {
-						GoogleGeminiApi.ChatCompletionMessage message = new GoogleGeminiApi.ChatCompletionMessage(
-							GoogleGeminiApi.ChatCompletionMessage.Role.USER, userMessage.getText()
-						);
-
-						return message;
-					} else if (msg instanceof ToolResponseMessage toolResponseMessage) {
-						Collection<GoogleGeminiApi.Part.FunctionResponse> functionResponses = toolResponseMessage.getResponses()
-							.stream()
-							.map(functionResponse ->
-								{
-									try {
-										return new GoogleGeminiApi.Part.FunctionResponse(
-											functionResponse.id(),
-											functionResponse.name(),
-											jacksonObjectMapper.readValue(functionResponse.responseData(), new TypeReference<HashMap<String, String>>() {})
-										);
-									} catch (JsonProcessingException e) {
-										throw new RuntimeException(e);
-									}
-									}
-							)
-								.toList();
-
-						List<GoogleGeminiApi.Part> parts = new ArrayList<>();
-
-						for (GoogleGeminiApi.Part.FunctionResponse functionResponse : functionResponses) {
-							parts.add(new GoogleGeminiApi.Part(functionResponse));
-						}
-
-						GoogleGeminiApi.ChatCompletionMessage message = new GoogleGeminiApi.ChatCompletionMessage(GoogleGeminiApi.ChatCompletionMessage.Role.TOOL, parts);
-
-						return message;
-					} else {
-						throw new RuntimeException("Unknown instance of message");
-					}
-				}).toList();
-
-			GoogleGeminiApi.Tool tool = new GoogleGeminiApi.Tool(functionDeclarations);
+			List<GoogleGeminiApi.FunctionDeclaration> functionDeclarations = buildFunctionDeclarations(toolDefinitions);
+			List<GoogleGeminiApi.ChatCompletionMessage> chatCompletionMessages = buildChatCompletionMessages(prompt);
 			request = new ChatCompletionRequest(
 					chatCompletionMessages,
 					GoogleGeminiApi.ChatCompletionMessage.getSystemInstruction(prompt),
-					GoogleGeminiApi.GenerationConfig.of(options),
-					List.of(tool)
+					GoogleGeminiApi.GenerationConfig.of(requestOptions),
+					List.of(new GoogleGeminiApi.Tool(functionDeclarations))
 			);
 		} else {
-			request = new ChatCompletionRequest(prompt, options);
+			request = new ChatCompletionRequest(prompt, requestOptions);
 		}
 		return request;
+	}
+
+	/**
+	 * Build function declarations from tool definitions.
+	 */
+	private List<GoogleGeminiApi.FunctionDeclaration> buildFunctionDeclarations(List<ToolDefinition> toolDefinitions) {
+		return toolDefinitions.stream()
+				.map(td -> new GoogleGeminiApi.FunctionDeclaration(
+						td.name(),
+						td.description(),
+						org.springframework.ai.model.ModelOptionsUtils.jsonToMap(td.inputSchema())
+				))
+				.toList();
+	}
+
+	/**
+	 * Convert prompt instructions to ChatCompletionMessages, skipping SYSTEM messages.
+	 */
+	private List<GoogleGeminiApi.ChatCompletionMessage> buildChatCompletionMessages(Prompt prompt) {
+		return prompt.getInstructions().stream()
+				.filter(i -> i.getMessageType() != MessageType.SYSTEM)
+				.map(msg -> {
+					if (msg instanceof AssistantMessage assistantMessage) {
+						return buildAssistantMessage(assistantMessage);
+					} else if (msg instanceof UserMessage userMessage) {
+						return buildUserMessage(userMessage);
+					} else if (msg instanceof ToolResponseMessage toolResponseMessage) {
+						return buildToolResponseMessage(toolResponseMessage);
+					} else {
+						throw new RuntimeException("Unknown type of message");
+					}
+				})
+				.toList();
+	}
+
+	private GoogleGeminiApi.ChatCompletionMessage buildAssistantMessage(AssistantMessage assistantMessage) {
+		Collection<GoogleGeminiApi.Part.FunctionCall> toolCalls = assistantMessage.hasToolCalls()
+				? assistantMessage
+				.getToolCalls()
+				.stream()
+				.map(call -> new GoogleGeminiApi.Part.FunctionCall(
+						call.id(),
+						call.name(),
+						readJsonValue(call.arguments())
+				))
+				.toList()
+				: Collections.emptyList();
+
+		List<GoogleGeminiApi.Part> parts = new ArrayList<>();
+		for (GoogleGeminiApi.Part.FunctionCall call : toolCalls) {
+			parts.add(new GoogleGeminiApi.Part(call));
+		}
+
+		return new GoogleGeminiApi.ChatCompletionMessage(
+				GoogleGeminiApi.ChatCompletionMessage.Role.ASSISTANT,
+				parts
+		);
+	}
+
+	private GoogleGeminiApi.ChatCompletionMessage buildUserMessage(UserMessage userMessage) {
+		return new GoogleGeminiApi.ChatCompletionMessage(
+				GoogleGeminiApi.ChatCompletionMessage.Role.USER,
+				userMessage.getText()
+		);
+	}
+
+	private GoogleGeminiApi.ChatCompletionMessage buildToolResponseMessage(ToolResponseMessage toolResponseMessage) {
+		Collection<GoogleGeminiApi.Part.FunctionResponse> functionResponses = toolResponseMessage
+				.getResponses()
+				.stream()
+				.map(functionResponse ->
+						new GoogleGeminiApi.Part.FunctionResponse(
+								functionResponse.id(),
+								functionResponse.name(),
+								readJsonValue(functionResponse.responseData())
+						)
+				)
+				.toList();
+
+		List<GoogleGeminiApi.Part> parts = new ArrayList<>();
+		for (GoogleGeminiApi.Part.FunctionResponse functionResponse : functionResponses) {
+			parts.add(new GoogleGeminiApi.Part(functionResponse));
+		}
+
+		return new GoogleGeminiApi.ChatCompletionMessage(GoogleGeminiApi.ChatCompletionMessage.Role.TOOL, parts);
 	}
 
 	public static Builder builder() {
@@ -359,7 +401,7 @@ public class GoogleGeminiChatModel implements ChatModel, StreamingChatModel {
 		private String apiKey;
 		private GoogleGeminiChatOptions options = GoogleGeminiChatOptions.builder().build();
 		private RetryTemplate retryTemplate = RetryUtils.DEFAULT_RETRY_TEMPLATE;
-		private GeminiToolCallingManager toolCallingManager = new GeminiToolCallingManager(ToolCallingManager.builder().build());
+		private ToolCallingManager toolCallingManager = ToolCallingManager.builder().build();
 		private ToolExecutionEligibilityPredicate toolExecutionEligibilityPredicate = new DefaultToolExecutionEligibilityPredicate();
 
 		public Builder apiKey(String apiKey) {
@@ -372,7 +414,7 @@ public class GoogleGeminiChatModel implements ChatModel, StreamingChatModel {
 			return this;
 		}
 
-		public Builder toolCallingManager(GeminiToolCallingManager toolCallingManager) {
+		public Builder toolCallingManager(ToolCallingManager toolCallingManager) {
 			this.toolCallingManager = toolCallingManager;
 			return this;
 		}
