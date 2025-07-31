@@ -65,9 +65,9 @@ public class GoogleGeminiApiIT {
 
 	@Test
 	void chatIT() {
-		var options = GoogleGeminiChatOptions.builder().withMaxOutputTokens(400).withThinkingBudget(128).build();
-		var model = new GoogleGeminiChatModel(api, options);
-		var output = model.call("Provide a list of 3 famous physicists and their key contributions");
+		var options = GoogleGeminiChatOptions.builder().withMaxOutputTokens(400).withThinkingBudget(512).build();
+		var model = new GoogleGeminiChatModel(api);
+		var output = model.call(new Prompt("Provide a list of 3 famous physicists and their key contributions", options));
 		assertThat(output).isNotNull();
 	}
 
