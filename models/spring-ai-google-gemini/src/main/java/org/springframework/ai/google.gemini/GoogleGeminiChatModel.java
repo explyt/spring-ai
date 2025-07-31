@@ -27,10 +27,7 @@ import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.EmptyUsage;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.model.Generation;
-import org.springframework.ai.chat.model.StreamingChatModel;
+import org.springframework.ai.chat.model.*;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.google.gemini.api.GoogleGeminiApi;
@@ -45,6 +42,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.retry.support.RetryTemplate;
 import org.springframework.util.Assert;
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.*;
 
@@ -218,7 +216,7 @@ public class GoogleGeminiChatModel implements ChatModel, StreamingChatModel {
 
 	private Flux<ChatResponse> internalStream(Prompt prompt, ChatResponse previousChatResponse) {
 		ChatCompletionRequest request = createRequest(prompt);
-		return retryTemplate.execute(ctx -> {
+		return Flux.deferContextual(contextView -> {
 			var completionChunks = this.api.chatCompletionStream(request);
 			return completionChunks.concatMap(chatCompletion -> {
 				List<Generation> generations = chatCompletion.choices()
@@ -227,17 +225,22 @@ public class GoogleGeminiChatModel implements ChatModel, StreamingChatModel {
 						.toList();
 				ChatResponse response = new ChatResponse(generations, from(chatCompletion));
 				if (this.toolExecutionEligibilityPredicate.isToolExecutionRequired(prompt.getOptions(), response)) {
-					var toolExecutionResult = this.toolCallingManager.executeToolCalls(prompt, response);
-					if (toolExecutionResult.returnDirect()) {
-						return Flux.just(ChatResponse.builder()
-								.from(response)
-								.generations(ToolExecutionResult.buildGenerations(toolExecutionResult))
-								.build());
-					} else {
-						return this.internalStream(new Prompt(toolExecutionResult.conversationHistory(), prompt.getOptions()), response);
+					return Flux.defer(() -> {
+						var toolExecutionResult = this.toolCallingManager.executeToolCalls(prompt, response);
+						if (toolExecutionResult.returnDirect()) {
+							return Flux.just(ChatResponse.builder()
+									.from(response)
+									.generations(ToolExecutionResult.buildGenerations(toolExecutionResult))
+									.build());
+						} else {
+							return this.internalStream(new Prompt(toolExecutionResult.conversationHistory(), prompt.getOptions()), response);
+						}
 					}
+					).subscribeOn(Schedulers.boundedElastic());
 				}
-				return Flux.just(response);
+				else {
+					return Flux.just(response);
+				}
 			});
 		});
 	}

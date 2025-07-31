@@ -19,9 +19,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.google.gemini.GoogleGeminiChatModel;
 import org.springframework.ai.google.gemini.GoogleGeminiChatOptions;
@@ -35,6 +37,7 @@ import reactor.core.publisher.Flux;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -93,15 +96,20 @@ public class GoogleGeminiApiIT {
 		List<Message> messages = new ArrayList<>(List.of(userMessage));
 		var model = new GoogleGeminiChatModel(api, promptOptions);
 		var prompt = new Prompt(messages, promptOptions);
-//		ChatResponse response = model.call(prompt);
-//		logger.info("Response: {}", response);
-//		assertThat(response.getResult().getOutput().getText()).contains("30", "10", "15");
+		ChatResponse response = model.call(prompt);
+		logger.info("Response: {}", response);
+		assertThat(response.getResult().getOutput().getText()).contains("30", "10", "15");
 
 		Flux<ChatResponse> responseFlux = model.stream(prompt);
-//		ChatResponse responseAwaited = responseFlux.blockFirst(Duration.ofSeconds(20));
-		List<ChatResponse> responseAwaited = responseFlux.collectList().block();
-		logger.info("Response awaited: {}", responseAwaited); // works, need to aggregate
-//		assertThat(responseAwaited.hasToolCalls());
-//		assertThat(responseAwaited.getResult().getOutput().getText()).contains("30", "10", "15");
+		String responseAwaited = responseFlux.collectList()
+				.block(Duration.ofSeconds(20))
+				.stream()
+				.map(ChatResponse::getResults)
+				.flatMap(List::stream)
+				.map(Generation::getOutput)
+				.map(AssistantMessage::getText)
+				.collect(Collectors.joining());
+		logger.info("Response awaited: {}", responseAwaited);
+		assertThat(responseAwaited).contains("30", "10", "15");
 	}
 }
