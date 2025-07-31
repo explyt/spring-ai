@@ -403,6 +403,7 @@ public class GoogleGeminiApi {
 	 * Represents a function declaration for Gemini function calling.
 	 * Follows OpenAPI schema subset as required by Gemini.
 	 */
+	// https://ai.google.dev/api/caching#FunctionDeclaration
 	@JsonInclude(Include.NON_NULL)
 	public static class FunctionDeclaration {
 		@JsonProperty("name")
@@ -418,7 +419,6 @@ public class GoogleGeminiApi {
 		public FunctionDeclaration() {
 		}
 
-		// https://ai.google.dev/api/caching#FunctionDeclaration
 		public FunctionDeclaration(String name, String description, Map<String, Object> parameters) {
 			this.name = name;
 			this.description = description;
@@ -450,14 +450,31 @@ public class GoogleGeminiApi {
 		}
 	}
 
+	// https://ai.google.dev/api/generate-content#candidate
 	@JsonInclude(Include.NON_NULL)
 	public record Candidate(@JsonProperty("content") ChatCompletionMessage content,
-			@JsonProperty("finishReason") String finishReason,
+			@JsonProperty("finishReason") FinishReason finishReason,
 			@JsonProperty("safetyRatings") List<SafetyRating> safetyRatings,
 			@JsonProperty("tokenCount") Integer tokenCount) {
 		public Candidate(ChatCompletionMessage content) {
 			this(content, null, null, null);
 		}
+	}
+
+	public enum FinishReason {
+		FINISH_REASON_UNSPECIFIED,
+		STOP,
+		MAX_TOKENS,
+		SAFETY,
+		RECITATION,
+		LANGUAGE,
+		OTHER,
+		BLOCKLIST,
+		PROHIBITED_CONTENT,
+		SPII,
+		MALFORMED_FUNCTION_CALL,
+		IMAGE_SAFETY,
+		UNEXPECTED_TOOL_CALL
 	}
 
 	@JsonInclude(Include.NON_NULL)
