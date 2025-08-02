@@ -57,7 +57,7 @@ public class GoogleGeminiApiIT {
 		ChatCompletionMessage chatCompletionMessage = new ChatCompletionMessage(ChatCompletionMessage.Role.USER,
 				"Hello world");
 		ResponseEntity<ChatCompletion> response = api
-				.chatCompletionEntity(new ChatCompletionRequest(List.of(chatCompletionMessage), null, null, null));
+			.chatCompletionEntity(new ChatCompletionRequest(List.of(chatCompletionMessage), null, null, null));
 
 		assertThat(response).isNotNull();
 		assertThat(response.getBody()).isNotNull();
@@ -67,17 +67,17 @@ public class GoogleGeminiApiIT {
 	void chatIT() {
 		var options = GoogleGeminiChatOptions.builder().withMaxOutputTokens(400).withThinkingBudget(512).build();
 		var model = new GoogleGeminiChatModel(api);
-		var output = model.call(new Prompt("Provide a list of 3 famous physicists and their key contributions", options));
+		var output = model
+			.call(new Prompt("Provide a list of 3 famous physicists and their key contributions", options));
 		assertThat(output).isNotNull();
 	}
 
 	@Test
 	void chatCompletionStream() {
-		ChatCompletionMessage chatCompletionMessage = new ChatCompletionMessage(
-			ChatCompletionMessage.Role.USER,
-			"Hello world"
-		);
-		var response = api.chatCompletionStream(new ChatCompletionRequest(List.of(chatCompletionMessage), null, null, null));
+		ChatCompletionMessage chatCompletionMessage = new ChatCompletionMessage(ChatCompletionMessage.Role.USER,
+				"Hello world");
+		var response = api
+			.chatCompletionStream(new ChatCompletionRequest(List.of(chatCompletionMessage), null, null, null));
 
 		assertThat(response).isNotNull();
 		var chunks = response.collectList().block();
@@ -87,12 +87,13 @@ public class GoogleGeminiApiIT {
 	@Test
 	void functionCallTest() {
 		GoogleGeminiChatOptions promptOptions = GoogleGeminiChatOptions.builder()
-			.withToolCallbacks(List.of(FunctionToolCallback.builder("getCurrentWeather", new MockWeatherService())
+			.toolCallbacks(List.of(FunctionToolCallback.builder("getCurrentWeather", new MockWeatherService())
 				.description("Get the weather in location")
 				.inputType(MockWeatherService.Request.class)
 				.build()))
 			.build();
-		UserMessage userMessage = new UserMessage("What's the weather like in San Francisco, Tokyo, and Paris? Generate 3 tool calls");
+		UserMessage userMessage = new UserMessage(
+				"What's the weather like in San Francisco, Tokyo, and Paris? Generate 3 tool calls");
 		List<Message> messages = new ArrayList<>(List.of(userMessage));
 		var model = new GoogleGeminiChatModel(api, promptOptions);
 		var prompt = new Prompt(messages, promptOptions);
@@ -102,14 +103,15 @@ public class GoogleGeminiApiIT {
 
 		Flux<ChatResponse> responseFlux = model.stream(prompt);
 		String responseAwaited = responseFlux.collectList()
-				.block(Duration.ofSeconds(20))
-				.stream()
-				.map(ChatResponse::getResults)
-				.flatMap(List::stream)
-				.map(Generation::getOutput)
-				.map(AssistantMessage::getText)
-				.collect(Collectors.joining());
+			.block(Duration.ofSeconds(20))
+			.stream()
+			.map(ChatResponse::getResults)
+			.flatMap(List::stream)
+			.map(Generation::getOutput)
+			.map(AssistantMessage::getText)
+			.collect(Collectors.joining());
 		logger.info("Response awaited: {}", responseAwaited);
 		assertThat(responseAwaited).contains("30", "10", "15");
 	}
+
 }

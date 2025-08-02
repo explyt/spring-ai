@@ -64,7 +64,6 @@ public class GoogleGeminiApi {
 
 	/**
 	 * Create a new chat completion api with default base URL
-	 *
 	 * @param apiKey Google Gemini apiKey.
 	 */
 	public GoogleGeminiApi(String apiKey) {
@@ -73,7 +72,6 @@ public class GoogleGeminiApi {
 
 	/**
 	 * Create a new chat completion api with default base URL
-	 *
 	 * @param apiKey Google Gemini apiKey.
 	 */
 	public GoogleGeminiApi(String chatModel, String apiKey) {
@@ -82,9 +80,8 @@ public class GoogleGeminiApi {
 
 	/**
 	 * Create a new chat completion api.
-	 *
 	 * @param baseUrl api base URL.
-	 * @param apiKey  Google Gemini apiKey.
+	 * @param apiKey Google Gemini apiKey.
 	 */
 	public GoogleGeminiApi(String baseUrl, String chatModel, String apiKey) {
 		this(baseUrl, chatModel, apiKey, RestClient.builder(), WebClient.builder());
@@ -92,38 +89,25 @@ public class GoogleGeminiApi {
 
 	/**
 	 * Create a new chat completion api.
-	 *
-	 * @param baseUrl           api base URL.
-	 * @param apiKey            Google Gemini apiKey.
+	 * @param baseUrl api base URL.
+	 * @param apiKey Google Gemini apiKey.
 	 * @param restClientBuilder RestClient builder.
 	 */
-	public GoogleGeminiApi(
-			String baseUrl,
-			String chatModel,
-			String apiKey,
-			RestClient.Builder restClientBuilder,
-			WebClient.Builder webClientBuilder
-	) {
+	public GoogleGeminiApi(String baseUrl, String chatModel, String apiKey, RestClient.Builder restClientBuilder,
+			WebClient.Builder webClientBuilder) {
 		this(baseUrl, chatModel, apiKey, restClientBuilder, webClientBuilder,
 				RetryUtils.DEFAULT_RESPONSE_ERROR_HANDLER);
 	}
 
 	/**
 	 * Create a new chat completion api.
-	 *
-	 * @param baseUrl              api base URL.
-	 * @param apiKey               Google Gemini apiKey.
-	 * @param restClientBuilder    RestClient builder.
+	 * @param baseUrl api base URL.
+	 * @param apiKey Google Gemini apiKey.
+	 * @param restClientBuilder RestClient builder.
 	 * @param responseErrorHandler Response error handler.
 	 */
-	public GoogleGeminiApi(
-			String baseUrl,
-			String chatModel,
-			String apiKey,
-			RestClient.Builder restClientBuilder,
-			WebClient.Builder webClientBuilder,
-			ResponseErrorHandler responseErrorHandler
-	) {
+	public GoogleGeminiApi(String baseUrl, String chatModel, String apiKey, RestClient.Builder restClientBuilder,
+			WebClient.Builder webClientBuilder, ResponseErrorHandler responseErrorHandler) {
 
 		this.chatModel = chatModel;
 
@@ -148,7 +132,8 @@ public class GoogleGeminiApi {
 	public enum ChatModel implements ModelDescription {
 
 		GEMINI_1_5_FLASH("gemini-1.5-flash"), GEMINI_1_5_PRO("gemini-1.5-pro"), GEMINI_1_0_PRO("gemini-1.0-pro"),
-		GEMINI_2_5_FLASH_LITE("gemini-2.5-flash-lite"), GEMINI_2_5_FLASH("gemini-2.5-flash"), GEMINI_2_5_PRO("gemini-2.5-pro");
+		GEMINI_2_5_FLASH_LITE("gemini-2.5-flash-lite"), GEMINI_2_5_FLASH("gemini-2.5-flash"),
+		GEMINI_2_5_PRO("gemini-2.5-pro");
 
 		public final String value;
 
@@ -168,47 +153,55 @@ public class GoogleGeminiApi {
 	}
 
 	@JsonInclude(Include.NON_NULL)
-	public record Part(
-		@JsonProperty("thought") Boolean thought,
-		@JsonProperty("thoughtSignature") String thoughtSignature,
-		@JsonProperty("text") String text,
-		@JsonProperty("inlineData") Object inlineData,
-		@JsonProperty("functionCall") FunctionCall functionCall,
-		@JsonProperty("functionResponse") FunctionResponse functionResponse,
-		@JsonProperty("fileData") Object fileData,
-		@JsonProperty("executableCode") Object executableCode,
-		@JsonProperty("codeExecutionResult") Object codeExecutionResult,
-		@JsonProperty("videoMetadata") Object videoMetadata
-	) {
+	public record Part(@JsonProperty("thought") Boolean thought,
+			@JsonProperty("thoughtSignature") String thoughtSignature, @JsonProperty("text") String text,
+			@JsonProperty("inlineData") Object inlineData, @JsonProperty("functionCall") FunctionCall functionCall,
+			@JsonProperty("functionResponse") FunctionResponse functionResponse,
+			@JsonProperty("fileData") Object fileData, @JsonProperty("executableCode") Object executableCode,
+			@JsonProperty("codeExecutionResult") Object codeExecutionResult,
+			@JsonProperty("videoMetadata") Object videoMetadata) {
 
-	// Enforce union type: only one of the union fields can be non-null
-	public Part(Boolean thought, String thoughtSignature, String text, Object inlineData, FunctionCall functionCall, FunctionResponse functionResponse, Object fileData, Object executableCode, Object codeExecutionResult, Object videoMetadata) {
-		validateUnion(text, inlineData, functionCall, functionResponse, fileData, executableCode, codeExecutionResult);
-		this.thought = thought;
-		this.thoughtSignature = thoughtSignature;
-		this.text = text;
-		this.inlineData = inlineData;
-		this.functionCall = functionCall;
-		this.functionResponse = functionResponse;
-		this.fileData = fileData;
-		this.executableCode = executableCode;
-		this.codeExecutionResult = codeExecutionResult;
-		this.videoMetadata = videoMetadata;
-	}
-
-	private static void validateUnion(Object text, Object inlineData, Object functionCall, Object functionResponse, Object fileData, Object executableCode, Object codeExecutionResult) {
-		int count = 0;
-		if (text != null) count++;
-		if (inlineData != null) count++;
-		if (functionCall != null) count++;
-		if (functionResponse != null) count++;
-		if (fileData != null) count++;
-		if (executableCode != null) count++;
-		if (codeExecutionResult != null) count++;
-		if (count > 1) {
-			throw new IllegalArgumentException("Part union type violation: only one of text, inlineData, functionCall, functionResponse, fileData, executableCode, codeExecutionResult can be non-null");
+		// Enforce union type: only one of the union fields can be non-null
+		public Part(Boolean thought, String thoughtSignature, String text, Object inlineData, FunctionCall functionCall,
+				FunctionResponse functionResponse, Object fileData, Object executableCode, Object codeExecutionResult,
+				Object videoMetadata) {
+			validateUnion(text, inlineData, functionCall, functionResponse, fileData, executableCode,
+					codeExecutionResult);
+			this.thought = thought;
+			this.thoughtSignature = thoughtSignature;
+			this.text = text;
+			this.inlineData = inlineData;
+			this.functionCall = functionCall;
+			this.functionResponse = functionResponse;
+			this.fileData = fileData;
+			this.executableCode = executableCode;
+			this.codeExecutionResult = codeExecutionResult;
+			this.videoMetadata = videoMetadata;
 		}
-	}
+
+		private static void validateUnion(Object text, Object inlineData, Object functionCall, Object functionResponse,
+				Object fileData, Object executableCode, Object codeExecutionResult) {
+			int count = 0;
+			if (text != null)
+				count++;
+			if (inlineData != null)
+				count++;
+			if (functionCall != null)
+				count++;
+			if (functionResponse != null)
+				count++;
+			if (fileData != null)
+				count++;
+			if (executableCode != null)
+				count++;
+			if (codeExecutionResult != null)
+				count++;
+			if (count > 1) {
+				throw new IllegalArgumentException(
+						"Part union type violation: only one of text, inlineData, functionCall, functionResponse, fileData, executableCode, codeExecutionResult can be non-null");
+			}
+		}
+
 		public Part(String text) {
 			this(false, null, text, null, null, null, null, null, null, null);
 		}
@@ -222,11 +215,8 @@ public class GoogleGeminiApi {
 		}
 
 		@JsonInclude(Include.NON_NULL)
-		public record FunctionCall(
-			@JsonProperty("id") String id,
-			@JsonProperty("name") String name,
-			@JsonProperty("args") Object args
-		) {
+		public record FunctionCall(@JsonProperty("id") String id, @JsonProperty("name") String name,
+				@JsonProperty("args") Object args) {
 			public FunctionCall(String id, String name, Object args) {
 				this.id = id == null ? "explyt" + java.util.UUID.randomUUID() : id;
 				this.name = name;
@@ -234,22 +224,18 @@ public class GoogleGeminiApi {
 			}
 
 			@com.fasterxml.jackson.annotation.JsonCreator
-			public static FunctionCall create(
-					@com.fasterxml.jackson.annotation.JsonProperty("id") String id,
+			public static FunctionCall create(@com.fasterxml.jackson.annotation.JsonProperty("id") String id,
 					@com.fasterxml.jackson.annotation.JsonProperty("name") String name,
 					@com.fasterxml.jackson.annotation.JsonProperty("args") Object args) {
 				return new FunctionCall(id, name, args);
 			}
 		}
 
+		// https://ai.google.dev/api/caching#FunctionResponse
 		@JsonInclude(Include.NON_NULL)
-		public static record FunctionResponse(
-			@JsonProperty("id") String id,
-			@JsonProperty("name") String name,
-			@JsonProperty("response") Object response,
-			@JsonProperty("willContinue") Boolean willContinue,
-			@JsonProperty("scheduling") Scheduling scheduling
-		) {
+		public static record FunctionResponse(@JsonProperty("id") String id, @JsonProperty("name") String name,
+				@JsonProperty("response") Object response, @JsonProperty("willContinue") Boolean willContinue,
+				@JsonProperty("scheduling") Scheduling scheduling) {
 
 			public FunctionResponse(String id, String name, Object response) {
 				this(id, name, response, false, Scheduling.SCHEDULING_UNSPECIFIED);
@@ -257,10 +243,9 @@ public class GoogleGeminiApi {
 		}
 
 		public enum Scheduling {
-			SCHEDULING_UNSPECIFIED,
-			SILENT,
-			WHEN_IDLE,
-			INTERRUPT
+
+			SCHEDULING_UNSPECIFIED, SILENT, WHEN_IDLE, INTERRUPT
+
 		}
 	}
 
@@ -360,14 +345,13 @@ public class GoogleGeminiApi {
 	public record ChatCompletionRequest(@JsonProperty("contents") List<ChatCompletionMessage> contents,
 			@JsonProperty("systemInstruction") ChatCompletionMessage systemInstruction,
 			@JsonProperty("generationConfig") GenerationConfig generationConfig,
-			@Nullable @JsonProperty("tools") List<Tool> tools
-	) {
+			@Nullable @JsonProperty("tools") List<Tool> tools) {
 		public ChatCompletionRequest(Prompt prompt, GoogleGeminiChatOptions options) {
 			this(prompt.getInstructions()
 				.stream()
 				.filter(instruction -> instruction.getMessageType() != MessageType.SYSTEM)
 				.map(ChatCompletionMessage::new)
-				.toList(), ChatCompletionMessage.getSystemInstruction(prompt), GenerationConfig.of(options),null);
+				.toList(), ChatCompletionMessage.getSystemInstruction(prompt), GenerationConfig.of(options), null);
 			Assert.isTrue(prompt.getInstructions()
 				.stream()
 				.filter(instruction -> instruction.getMessageType() == MessageType.SYSTEM)
@@ -380,6 +364,7 @@ public class GoogleGeminiApi {
 	 */
 	@JsonInclude(Include.NON_NULL)
 	public static class Tool {
+
 		@JsonProperty("functionDeclarations")
 		private List<FunctionDeclaration> functionDeclarations;
 
@@ -397,15 +382,17 @@ public class GoogleGeminiApi {
 		public void setFunctionDeclarations(List<FunctionDeclaration> functionDeclarations) {
 			this.functionDeclarations = functionDeclarations;
 		}
+
 	}
 
 	/**
-	 * Represents a function declaration for Gemini function calling.
-	 * Follows OpenAPI schema subset as required by Gemini.
+	 * Represents a function declaration for Gemini function calling. Follows OpenAPI
+	 * schema subset as required by Gemini.
 	 */
 	// https://ai.google.dev/api/caching#FunctionDeclaration
 	@JsonInclude(Include.NON_NULL)
 	public static class FunctionDeclaration {
+
 		@JsonProperty("name")
 		private String name;
 
@@ -448,6 +435,7 @@ public class GoogleGeminiApi {
 		public void setParameters(Object parameters) {
 			this.parameters = parameters;
 		}
+
 	}
 
 	// https://ai.google.dev/api/generate-content#candidate
@@ -462,19 +450,10 @@ public class GoogleGeminiApi {
 	}
 
 	public enum FinishReason {
-		FINISH_REASON_UNSPECIFIED,
-		STOP,
-		MAX_TOKENS,
-		SAFETY,
-		RECITATION,
-		LANGUAGE,
-		OTHER,
-		BLOCKLIST,
-		PROHIBITED_CONTENT,
-		SPII,
-		MALFORMED_FUNCTION_CALL,
-		IMAGE_SAFETY,
-		UNEXPECTED_TOOL_CALL
+
+		FINISH_REASON_UNSPECIFIED, STOP, MAX_TOKENS, SAFETY, RECITATION, LANGUAGE, OTHER, BLOCKLIST, PROHIBITED_CONTENT,
+		SPII, MALFORMED_FUNCTION_CALL, IMAGE_SAFETY, UNEXPECTED_TOOL_CALL
+
 	}
 
 	@JsonInclude(Include.NON_NULL)
@@ -521,7 +500,6 @@ public class GoogleGeminiApi {
 	/**
 	 * Creates a model response for the given chat conversation. <a href=
 	 * "https://ai.google.dev/api/generate-content#v1beta.models.generateContent">Docs</a>
-	 *
 	 * @param chatRequest The chat completion request.
 	 * @return Entity response with {@link ChatCompletion} as a body and HTTP status code
 	 * and headers.
@@ -540,7 +518,6 @@ public class GoogleGeminiApi {
 	/**
 	 * Creates a streaming chat response for the given chat conversation. <a href=
 	 * "https://ai.google.dev/api/generate-content#method:-models.streamgeneratecontent">Docs</a>
-	 *
 	 * @param chatRequest The chat completion request. Must have the stream property set
 	 * to true.
 	 * @return Returns a {@link Flux} stream from chat completion chunks.

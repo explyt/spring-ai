@@ -35,13 +35,15 @@ import java.util.*;
 public class GoogleGeminiChatOptions implements ToolCallingChatOptions {
 
 	/**
-	 * Collection of {@link ToolCallback}s to be used for tool calling in the chat completion requests.
+	 * Collection of {@link ToolCallback}s to be used for tool calling in the chat
+	 * completion requests.
 	 */
 	@JsonIgnore
 	private List<ToolCallback> toolCallbacks = new ArrayList<>();
 
 	/**
-	 * Collection of tool names to be resolved at runtime and used for tool calling in the chat completion requests.
+	 * Collection of tool names to be resolved at runtime and used for tool calling in the
+	 * chat completion requests.
 	 */
 	@JsonIgnore
 	private Set<String> toolNames = new HashSet<>();
@@ -124,7 +126,6 @@ public class GoogleGeminiChatOptions implements ToolCallingChatOptions {
 	public Set<String> getToolNames() {
 		return this.toolNames != null ? this.toolNames : Set.of();
 	}
-
 
 	@Override
 	@JsonIgnore
@@ -221,7 +222,7 @@ public class GoogleGeminiChatOptions implements ToolCallingChatOptions {
 			return this;
 		}
 
-		public Builder withToolCallbacks(List<ToolCallback> toolCallbacks) {
+		public Builder toolCallbacks(List<ToolCallback> toolCallbacks) {
 			this.options.setToolCallbacks(toolCallbacks);
 			return this;
 		}
@@ -229,6 +230,7 @@ public class GoogleGeminiChatOptions implements ToolCallingChatOptions {
 		public GoogleGeminiChatOptions build() {
 			return this.options;
 		}
+
 	}
 
 	@Override
