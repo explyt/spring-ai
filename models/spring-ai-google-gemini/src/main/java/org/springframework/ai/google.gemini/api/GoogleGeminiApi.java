@@ -158,34 +158,34 @@ public class GoogleGeminiApi {
 			@JsonProperty("inlineData") String inlineData, @JsonProperty("functionCall") FunctionCall functionCall,
 			@JsonProperty("functionResponse") FunctionResponse functionResponse) {
 
-		// Enforce union type: only one of the union fields can be non-null
-		public Part(Boolean thought, String thoughtSignature, String text, String inlineData, FunctionCall functionCall,
-				FunctionResponse functionResponse) {
-			validateUnion(text, inlineData, functionCall, functionResponse);
-			this.thought = thought;
-			this.thoughtSignature = thoughtSignature;
-			this.text = text;
-			this.inlineData = inlineData;
-			this.functionCall = functionCall;
-			this.functionResponse = functionResponse;
-		}
-
-		private static void validateUnion(Object text, Object inlineData, Object functionCall,
-				Object functionResponse) {
-			int count = 0;
-			if (text != null)
-				count++;
-			if (inlineData != null)
-				count++;
-			if (functionCall != null)
-				count++;
-			if (functionResponse != null)
-				count++;
-			if (count > 1) {
-				throw new IllegalArgumentException(
-						"Part union type violation: only one of text, inlineData, functionCall, functionResponse, fileData, executableCode, codeExecutionResult can be non-null");
-			}
-		}
+//		// Enforce union type: only one of the union fields can be non-null
+//		public Part(Boolean thought, String thoughtSignature, String text, String inlineData, FunctionCall functionCall,
+//				FunctionResponse functionResponse) {
+//			validateUnion(text, inlineData, functionCall, functionResponse);
+//			this.thought = thought;
+//			this.thoughtSignature = thoughtSignature;
+//			this.text = text;
+//			this.inlineData = inlineData;
+//			this.functionCall = functionCall;
+//			this.functionResponse = functionResponse;
+//		}
+//
+//		private static void validateUnion(Object text, Object inlineData, Object functionCall,
+//				Object functionResponse) {
+//			int count = 0;
+//			if (text != null)
+//				count++;
+//			if (inlineData != null)
+//				count++;
+//			if (functionCall != null)
+//				count++;
+//			if (functionResponse != null)
+//				count++;
+//			if (count > 1) {
+//				throw new IllegalArgumentException(
+//						"Part union type violation: only one of text, inlineData, functionCall, functionResponse, fileData, executableCode, codeExecutionResult can be non-null");
+//			}
+//		}
 
 		public Part(String text) {
 			this(false, null, text, null, null, null);
