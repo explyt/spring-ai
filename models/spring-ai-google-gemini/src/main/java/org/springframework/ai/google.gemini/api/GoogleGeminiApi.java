@@ -159,7 +159,8 @@ public class GoogleGeminiApi {
 			@JsonProperty("inlineData") String inlineData, @JsonProperty("functionCall") FunctionCall functionCall,
 			@JsonProperty("functionResponse") FunctionResponse functionResponse) {
 
-		// do not compact constructor unless you check that plugin works with this configuration
+		// do not compact constructor unless you check that plugin works with this
+		// configuration
 		@JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
 		public Part(@JsonProperty("thought") Boolean thought, @JsonProperty("thoughtSignature") String thoughtSignature,
 				@JsonProperty("text") String text, @JsonProperty("inlineData") String inlineData,
