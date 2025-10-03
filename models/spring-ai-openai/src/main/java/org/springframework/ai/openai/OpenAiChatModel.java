@@ -687,7 +687,7 @@ public class OpenAiChatModel implements ChatModel {
 			var function = new OpenAiApi.FunctionTool.Function(toolDefinition.description(), toolDefinition.name(),
 					toolDefinition.inputSchema());
 
-			// if user want strict mode, he must've supplied additional properties, otherwise they will get:
+			// if user wants a strict mode, they must've supplied 'additionalProperties', otherwise they will get:
 			// 400 : 'additionalProperties' is required to be supplied and to be false.
 			var hasAdditionalPropertiesFieldSetNotSetToTrue = Boolean.TRUE.equals(function.getParameters().get("additionalProperties"));
 
@@ -717,7 +717,7 @@ public class OpenAiChatModel implements ChatModel {
 
 			var requiredFieldContainsEveryProperty = requiredSet.equals(propertyKeySet);
 
-			// set as `strict` if possible
+			// set as 'strict' if possible
 			var canBeStrict = hasAdditionalPropertiesFieldSetNotSetToTrue && requiredFieldContainsEveryProperty;
 
 			function.setStrict(canBeStrict);
