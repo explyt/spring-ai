@@ -687,31 +687,37 @@ public class OpenAiChatModel implements ChatModel {
 			var function = new OpenAiApi.FunctionTool.Function(toolDefinition.description(), toolDefinition.name(),
 					toolDefinition.inputSchema());
 
-			// if user wants a strict mode, they must've supplied 'additionalProperties', otherwise they will get:
+			// if user wants a strict mode, they must've supplied 'additionalProperties',
+			// otherwise they will get:
 			// 400 : 'additionalProperties' is required to be supplied and to be false.
-			var hasAdditionalPropertiesFieldSetNotSetToTrue = Boolean.TRUE.equals(function.getParameters().get("additionalProperties"));
+			var hasAdditionalPropertiesFieldSetNotSetToTrue = Boolean.TRUE
+				.equals(function.getParameters().get("additionalProperties"));
 
 			var requiredField = function.getParameters().getOrDefault("required", Collections.emptyList());
 			var propertyField = function.getParameters().getOrDefault("properties", Collections.emptyMap());
 
-			// Compare the set of required property names with the set of keys in properties
+			// Compare the set of required property names with the set of keys in
+			// properties
 			Set<String> requiredSet;
 			if (requiredField instanceof List<?> list) {
 				requiredSet = list.stream()
-						.filter(String.class::isInstance)
-						.map(String.class::cast)
-						.collect(Collectors.toSet());
-			} else {
+					.filter(String.class::isInstance)
+					.map(String.class::cast)
+					.collect(Collectors.toSet());
+			}
+			else {
 				requiredSet = Collections.emptySet();
 			}
 
 			Set<String> propertyKeySet;
 			if (propertyField instanceof Map<?, ?> map) {
-				propertyKeySet = map.keySet().stream()
-						.filter(String.class::isInstance)
-						.map(k -> (String) k)
-						.collect(Collectors.toSet());
-			} else {
+				propertyKeySet = map.keySet()
+					.stream()
+					.filter(String.class::isInstance)
+					.map(k -> (String) k)
+					.collect(Collectors.toSet());
+			}
+			else {
 				propertyKeySet = Collections.emptySet();
 			}
 

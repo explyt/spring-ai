@@ -98,7 +98,7 @@ public class OpenAiApiToolFunctionCallIT {
 									"required": ["location", "lat", "lon", "unit"],
 									"additionalProperties": false
 								}
-								"""),true));
+								"""), true));
 		List<ChatCompletionMessage> messages = new ArrayList<>(List.of(message));
 
 		ChatCompletionRequest chatCompletionRequest = new ChatCompletionRequest(messages, "gpt-4o",

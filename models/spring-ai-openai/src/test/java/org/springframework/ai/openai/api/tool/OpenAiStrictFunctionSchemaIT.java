@@ -44,8 +44,8 @@ public class OpenAiStrictFunctionSchemaIT {
 		var userMsg = new ChatCompletionMessage("Test strict schema", Role.USER);
 
 		var functionTool = new OpenAiApi.FunctionTool(OpenAiApi.FunctionTool.Type.FUNCTION,
-				new OpenAiApi.FunctionTool.Function("Test function with strict schema.",
-						"getCurrentWeather", ModelOptionsUtils.jsonToMap(schemaJson), true));
+				new OpenAiApi.FunctionTool.Function("Test function with strict schema.", "getCurrentWeather",
+						ModelOptionsUtils.jsonToMap(schemaJson), true));
 		functionTool.getFunction().setStrict(true);
 
 		List<ChatCompletionMessage> messages = new ArrayList<>(List.of(userMsg));
@@ -59,9 +59,9 @@ public class OpenAiStrictFunctionSchemaIT {
 		}
 		else {
 			assertThatThrownBy(() -> this.completionApi.chatCompletionEntity(req))
-					.isInstanceOf(NonTransientAiException.class)
-					.hasMessageContaining("Invalid schema for function 'getCurrentWeather'")
-					.hasMessageContaining("'additionalProperties' is required to be supplied and to be false");
+				.isInstanceOf(NonTransientAiException.class)
+				.hasMessageContaining("Invalid schema for function 'getCurrentWeather'")
+				.hasMessageContaining("'additionalProperties' is required to be supplied and to be false");
 		}
 	}
 
@@ -109,4 +109,5 @@ public class OpenAiStrictFunctionSchemaIT {
 		invokeOnce(invalidMissingAdditional, false);
 		invokeOnce(invalidAdditionalTrue, false);
 	}
+
 }
