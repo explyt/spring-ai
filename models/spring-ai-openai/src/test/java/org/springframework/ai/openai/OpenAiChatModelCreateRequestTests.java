@@ -4,6 +4,7 @@
 
 package org.springframework.ai.openai;
 
+import java.lang.reflect.Type;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -45,6 +46,12 @@ record MyMockWeatherServiceRequest(@JsonProperty(required = true,
 
 }
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonClassDescription("Weather API request")
+record MultipleMockWeatherServiceRequest(@JsonProperty(required = true,
+		value = "request_list") @JsonPropertyDescription("Batch request to Weather API") MyMockWeatherServiceRequest requsts) {
+}
+
 @EnabledIfEnvironmentVariable(named = "OPENAI_API_KEY", matches = ".+")
 public class OpenAiChatModelCreateRequestTests {
 
@@ -74,7 +81,7 @@ public class OpenAiChatModelCreateRequestTests {
 						  },
 						  "required": ["location", "lat", "lon", "unit"]
 						}
-						""", null),
+						""", MyMockWeatherServiceRequest.class, null),
 				// 'additionalProperties' to 'false', 'required' matches 'properties'
 				Arguments.of("""
 						{
@@ -100,7 +107,7 @@ public class OpenAiChatModelCreateRequestTests {
 						  "required": ["location", "lat", "lon", "unit"],
 						  "additionalProperties": false
 						}
-						""", true),
+						""", MyMockWeatherServiceRequest.class, true),
 				// no 'additionalProperties', 'required' do not match 'properties'
 				Arguments.of("""
 						{
@@ -125,7 +132,7 @@ public class OpenAiChatModelCreateRequestTests {
 						  },
 						  "required": ["location", "lat", "lon"]
 						}
-						""", null),
+						""", MyMockWeatherServiceRequest.class, null),
 				// 'additionalProperties' to true
 				Arguments.of("""
 						{
@@ -151,19 +158,85 @@ public class OpenAiChatModelCreateRequestTests {
 						  "required": ["location", "lat", "lon", "unit"],
 						  "additionalProperties": true
 						}
-						""", null));
+						""", MyMockWeatherServiceRequest.class, null),
+				// 'additionalProperties' is not set inside
+				Arguments.of("""
+						{
+						  "type": "object",
+						  "properties": {
+						    "request_list": {
+						      "type": "object",
+						      "properties": {
+						        "location": {
+						          "type": "string",
+						          "description": "The city and state e.g. San Francisco, CA"
+						        },
+						        "lat": {
+						          "type": "number",
+						          "description": "The city latitude"
+						        },
+						        "lon": {
+						          "type": "number",
+						          "description": "The city longitude"
+						        },
+						        "unit": {
+						          "type": "string",
+						          "enum": ["C", "F"]
+						        }
+						      },
+						      "required": ["location", "lat", "lon", "unit"]
+						    }
+						  },
+						  "required": ["request_list"],
+						  "additionalProperties": false
+						}
+						""", MultipleMockWeatherServiceRequest.class, false),
+				// 'additionalProperties' is set inside
+				Arguments.of("""
+						{
+						  "type": "object",
+						  "properties": {
+						    "request_list": {
+						      "type": "object",
+						      "properties": {
+						        "location": {
+						          "type": "string",
+						          "description": "The city and state e.g. San Francisco, CA"
+						        },
+						        "lat": {
+						          "type": "number",
+						          "description": "The city latitude"
+						        },
+						        "lon": {
+						          "type": "number",
+						          "description": "The city longitude"
+						        },
+						        "unit": {
+						          "type": "string",
+						          "enum": ["C", "F"]
+						        }
+						      },
+						      "required": ["location", "lat", "lon", "unit"],
+						      "additionalProperties": false
+						    }
+						  },
+						  "required": ["request_list"],
+						  "additionalProperties": false
+						}
+						""", MultipleMockWeatherServiceRequest.class, true));
 	}
 
 	@ParameterizedTest
 	@MethodSource("schemaProvider")
-	void createRequestWithStrictCompatiblePropertiesHasStrictTrue(String schema, Boolean expectedStrictToBe) {
+	void createRequestWithStrictCompatiblePropertiesHasStrictTrue(String schema, Type inputType,
+			Boolean expectedStrictToBe) {
 
 		OpenAiChatOptions options = OpenAiChatOptions.builder()
 			.model(OpenAiApi.DEFAULT_CHAT_MODEL)
 			.toolCallbacks(List.of(FunctionToolCallback.builder("getCurrentWeather", new MockWeatherService())
 				.description("Get the weather in location")
 				.inputSchema(schema)
-				.inputType(MyMockWeatherServiceRequest.class)
+				.inputType(inputType)
 				.build()))
 			.build();
 
@@ -179,7 +252,8 @@ public class OpenAiChatModelCreateRequestTests {
 			.isTrue();
 
 		assertThatCode(() -> {
-			var ignored = model.call(prompt);
+			var output = model.call(prompt);
+			System.out.println(output.getResult().getOutput());
 		}).doesNotThrowAnyException();
 	}
 
