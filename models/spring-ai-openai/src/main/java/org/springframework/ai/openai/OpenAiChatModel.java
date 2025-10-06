@@ -752,8 +752,8 @@ public class OpenAiChatModel implements ChatModel {
 				return false;
 		}
 
-		// Handle supported combinator: oneOF
-		for (String key : new String[] { "oneOf" }) {
+		// Handle supported combinator: oneOf
+		for (String key : new String[] { "anyOf" }) {
 			var comb = node.path(key);
 			if (comb.isArray()) {
 				for (var el : comb) {
@@ -764,7 +764,7 @@ public class OpenAiChatModel implements ChatModel {
 		}
 
 		// Handle unsupported combinators: fail if seen
-		for (String key : new String[] { "oneOf", "anyOf", "allOf" }) {
+		for (String key : new String[] { "oneOf", "allOf" }) {
 			var comb = node.path(key);
 			if (comb.isArray()) {
 				return false;
