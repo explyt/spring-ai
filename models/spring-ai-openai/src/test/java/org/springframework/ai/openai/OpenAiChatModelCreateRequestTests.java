@@ -50,106 +50,106 @@ public class OpenAiChatModelCreateRequestTests {
 		return Stream.of(
 				// no 'additionalProperties', 'required' matches 'properties'
 				Arguments.of("""
-				{
-				  "type": "object",
-				  "properties": {
-				    "location": {
-				      "type": "string",
-				      "description": "The city and state e.g. San Francisco, CA"
-				    },
-				    "lat": {
-				      "type": "number",
-				      "description": "The city latitude"
-				    },
-				    "lon": {
-				      "type": "number",
-				      "description": "The city longitude"
-				    },
-				    "unit": {
-				      "type": "string",
-				      "enum": ["C", "F"]
-				    }
-				  },
-				  "required": ["location", "lat", "lon", "unit"]
-				}
-				""", null),
+						{
+						  "type": "object",
+						  "properties": {
+						    "location": {
+						      "type": "string",
+						      "description": "The city and state e.g. San Francisco, CA"
+						    },
+						    "lat": {
+						      "type": "number",
+						      "description": "The city latitude"
+						    },
+						    "lon": {
+						      "type": "number",
+						      "description": "The city longitude"
+						    },
+						    "unit": {
+						      "type": "string",
+						      "enum": ["C", "F"]
+						    }
+						  },
+						  "required": ["location", "lat", "lon", "unit"]
+						}
+						""", null),
 				// 'additionalProperties' to 'false', 'required' matches 'properties'
 				Arguments.of("""
-				{
-				  "type": "object",
-				  "properties": {
-				    "location": {
-				      "type": "string",
-				      "description": "The city and state e.g. San Francisco, CA"
-				    },
-				    "lat": {
-				      "type": "number",
-				      "description": "The city latitude"
-				    },
-				    "lon": {
-				      "type": "number",
-				      "description": "The city longitude"
-				    },
-				    "unit": {
-				      "type": "string",
-				      "enum": ["C", "F"]
-				    }
-				  },
-				  "required": ["location", "lat", "lon", "unit"],
-				  "additionalProperties": false
-				}
-				""", true),
+						{
+						  "type": "object",
+						  "properties": {
+						    "location": {
+						      "type": "string",
+						      "description": "The city and state e.g. San Francisco, CA"
+						    },
+						    "lat": {
+						      "type": "number",
+						      "description": "The city latitude"
+						    },
+						    "lon": {
+						      "type": "number",
+						      "description": "The city longitude"
+						    },
+						    "unit": {
+						      "type": "string",
+						      "enum": ["C", "F"]
+						    }
+						  },
+						  "required": ["location", "lat", "lon", "unit"],
+						  "additionalProperties": false
+						}
+						""", true),
 				// no 'additionalProperties', 'required' do not match 'properties'
 				Arguments.of("""
-				{
-				  "type": "object",
-				  "properties": {
-				    "location": {
-				      "type": "string",
-				      "description": "The city and state e.g. San Francisco, CA"
-				    },
-				    "lat": {
-				      "type": "number",
-				      "description": "The city latitude"
-				    },
-				    "lon": {
-				      "type": "number",
-				      "description": "The city longitude"
-				    },
-				    "unit": {
-				      "type": "string",
-				      "enum": ["C", "F"]
-				    }
-				  },
-				  "required": ["location", "lat", "lon"]
-				}
-				""", null),
+						{
+						  "type": "object",
+						  "properties": {
+						    "location": {
+						      "type": "string",
+						      "description": "The city and state e.g. San Francisco, CA"
+						    },
+						    "lat": {
+						      "type": "number",
+						      "description": "The city latitude"
+						    },
+						    "lon": {
+						      "type": "number",
+						      "description": "The city longitude"
+						    },
+						    "unit": {
+						      "type": "string",
+						      "enum": ["C", "F"]
+						    }
+						  },
+						  "required": ["location", "lat", "lon"]
+						}
+						""", null),
 				// 'additionalProperties' to true
 				Arguments.of("""
-				{
-				  "type": "object",
-				  "properties": {
-				    "location": {
-				      "type": "string",
-				      "description": "The city and state e.g. San Francisco, CA"
-				    },
-				    "lat": {
-				      "type": "number",
-				      "description": "The city latitude"
-				    },
-				    "lon": {
-				      "type": "number",
-				      "description": "The city longitude"
-				    },
-				    "unit": {
-				      "type": "string",
-				      "enum": ["C", "F"]
-				    }
-				  },
-				  "required": ["location", "lat", "lon", "unit"],
-				  "additionalProperties": true
-				}
-				""", null));
+						{
+						  "type": "object",
+						  "properties": {
+						    "location": {
+						      "type": "string",
+						      "description": "The city and state e.g. San Francisco, CA"
+						    },
+						    "lat": {
+						      "type": "number",
+						      "description": "The city latitude"
+						    },
+						    "lon": {
+						      "type": "number",
+						      "description": "The city longitude"
+						    },
+						    "unit": {
+						      "type": "string",
+						      "enum": ["C", "F"]
+						    }
+						  },
+						  "required": ["location", "lat", "lon", "unit"],
+						  "additionalProperties": true
+						}
+						""", null));
 	}
 
 	@ParameterizedTest
