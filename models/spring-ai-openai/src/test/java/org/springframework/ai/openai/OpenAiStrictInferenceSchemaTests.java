@@ -34,8 +34,8 @@ public class OpenAiStrictInferenceSchemaTests {
 
 	private static Stream<Arguments> schemaProvider() {
 		return Stream.of(
-			// Simple strict object: ap=false and required==properties
-			Arguments.of("""
+				// Simple strict object: ap=false and required==properties
+				Arguments.of("""
 				{
 				  "type": "object",
 				  "properties": {
@@ -47,8 +47,8 @@ public class OpenAiStrictInferenceSchemaTests {
 				}
 				""", true),
 
-			// Missing additionalProperties at root => cannot be strict
-			Arguments.of("""
+				// Missing additionalProperties at root => cannot be strict
+				Arguments.of("""
 				{
 				  "type": "object",
 				  "properties": { "x": {"type": "string"} },
@@ -56,8 +56,8 @@ public class OpenAiStrictInferenceSchemaTests {
 				}
 				""", false),
 
-			// additionalProperties true => cannot be strict
-			Arguments.of("""
+				// additionalProperties true => cannot be strict
+				Arguments.of("""
 				{
 				  "type": "object",
 				  "properties": { "x": {"type": "string"} },
@@ -66,8 +66,8 @@ public class OpenAiStrictInferenceSchemaTests {
 				}
 				""", false),
 
-			// Optional property (required != properties) => cannot be strict
-			Arguments.of("""
+				// Optional property (required != properties) => cannot be strict
+				Arguments.of("""
 				{
 				  "type": "object",
 				  "properties": { "x": {"type": "string"}, "y": {"type": "string"} },
@@ -76,8 +76,8 @@ public class OpenAiStrictInferenceSchemaTests {
 				}
 				""", false),
 
-			// Nested object strict at both levels => strict true
-			Arguments.of("""
+				// Nested object strict at both levels => strict true
+				Arguments.of("""
 				{
 				  "type": "object",
 				  "properties": {
@@ -93,8 +93,8 @@ public class OpenAiStrictInferenceSchemaTests {
 				}
 				""", true),
 
-			// Nested object missing inner additionalProperties => cannot be strict
-			Arguments.of("""
+				// Nested object missing inner additionalProperties => cannot be strict
+				Arguments.of("""
 				{
 				  "type": "object",
 				  "properties": {
@@ -109,8 +109,8 @@ public class OpenAiStrictInferenceSchemaTests {
 				}
 				""", false),
 
-			// Array of objects, items strict => can be strict (root is strict and items strict)
-			Arguments.of("""
+				// Array of objects, items strict => can be strict (root is strict and items strict)
+				Arguments.of("""
 				{
 				  "type": "object",
 				  "properties": {
@@ -129,8 +129,8 @@ public class OpenAiStrictInferenceSchemaTests {
 				}
 				""", true),
 
-			// Array items missing additionalProperties => cannot be strict
-			Arguments.of("""
+				// Array items missing additionalProperties => cannot be strict
+				Arguments.of("""
 				{
 				  "type": "object",
 				  "properties": {
@@ -148,8 +148,8 @@ public class OpenAiStrictInferenceSchemaTests {
 				}
 				""", false),
 
-			// property-level anyOf: both branches strict and root strict => strict true
-			Arguments.of("""
+				// property-level anyOf: both branches strict and root strict => strict true
+				Arguments.of("""
 				{
 				  "type": "object",
 				  "properties": {
@@ -165,8 +165,8 @@ public class OpenAiStrictInferenceSchemaTests {
 				}
 				""", true),
 
-			// property-level anyOf: one branch non-strict (missing additionalProperties) => cannot be strict
-			Arguments.of("""
+				// property-level anyOf: one branch non-strict (missing additionalProperties) => cannot be strict
+				Arguments.of("""
 				{
 				  "type": "object",
 				  "properties": {
@@ -182,8 +182,8 @@ public class OpenAiStrictInferenceSchemaTests {
 				}
 				""", false),
 
-			// additionalProperties is an object schema (not boolean false) => cannot be strict
-			Arguments.of("""
+				// additionalProperties is an object schema (not boolean false) => cannot be strict
+				Arguments.of("""
 				{
 				  "type": "object",
 				  "properties": {"x": {"type": "string"}},
@@ -198,28 +198,28 @@ public class OpenAiStrictInferenceSchemaTests {
 	@MethodSource("schemaProvider")
 	void strictInferenceForComplexSchemas(String schema, boolean expectStrictTrue) {
 		OpenAiChatOptions options = OpenAiChatOptions.builder()
-			.model(OpenAiApi.DEFAULT_CHAT_MODEL)
-			.toolCallbacks(List.of(
-				FunctionToolCallback.builder("testTool", new MockWeatherService())
-					.description("Test tool")
-					.inputType(Object.class)
-					.inputSchema(schema)
-					.build()
-			))
-			.build();
+				.model(OpenAiApi.DEFAULT_CHAT_MODEL)
+				.toolCallbacks(List.of(
+						FunctionToolCallback.builder("testTool", new MockWeatherService())
+								.description("Test tool")
+								.inputType(Object.class)
+								.inputSchema(schema)
+								.build()
+				))
+				.build();
 
 		Prompt prompt = new Prompt(List.of(new UserMessage("Run test tool")), options);
 
 		OpenAiChatModel model = OpenAiChatModel.builder()
-			.openAiApi(OpenAiApi.builder().apiKey(System.getenv("OPENAI_API_KEY")).build())
-			.build();
+				.openAiApi(OpenAiApi.builder().apiKey(System.getenv("OPENAI_API_KEY")).build())
+				.build();
 
 		ChatCompletionRequest request = model.createRequest(prompt, false);
 
 		// If we expect strict true, require TRUE exactly.
 		// Otherwise, assert it is not TRUE (can be false or null depending on current implementation).
 		boolean isAnyStrictTrue = request.tools().stream()
-			.allMatch(tool -> Boolean.TRUE.equals(tool.getFunction().getStrict()));
+				.allMatch(tool -> Boolean.TRUE.equals(tool.getFunction().getStrict()));
 
 		if (expectStrictTrue) {
 			assertThat(isAnyStrictTrue).isTrue();
@@ -227,8 +227,8 @@ public class OpenAiStrictInferenceSchemaTests {
 		else {
 			// At least one tool (only one here) must not be strict true
 			assertThat(request.tools().stream()
-				.noneMatch(tool -> Boolean.TRUE.equals(tool.getFunction().getStrict())))
-				.isTrue();
+					.noneMatch(tool -> Boolean.TRUE.equals(tool.getFunction().getStrict())))
+					.isTrue();
 		}
 
 		assertThatCode(() -> {
