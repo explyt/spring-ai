@@ -790,8 +790,7 @@ public class OpenAiChatModel implements ChatModel {
 				function.setStrict(strict);
 			}
 			catch (Throwable t) {
-				logger.warn("Failed to infer [strict](strict) for schema {}: {}", toolDefinition.inputSchema(),
-						t.toString());
+				logger.warn("Failed to infer 'strict' for schema {}: {}", toolDefinition.inputSchema(), t.toString());
 			}
 			return new OpenAiApi.FunctionTool(function);
 		}).toList();
