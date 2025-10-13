@@ -1093,10 +1093,11 @@ public class OpenAiApi {
 	 * @param reasoningEffort Constrains effort on reasoning for reasoning models.
 	 * Currently supported values are low, medium, and high. Reducing reasoning effort can
 	 * result in faster responses and fewer tokens used on reasoning in a response.
-	 * @param promptCacheKey Key used by OpenAI for caching prompt prefixes. OpenAI claims they
-	 * do caching even without this key, but testing shows that without this key OpenAI doesn't
-	 * do prompt prefix caching. OpenAI says this should be an end-user identifier,
-	 * so in plugin we can use random UUID, while in server we can use deviceId hash.
+	 * @param promptCacheKey Key used by OpenAI for caching prompt prefixes. OpenAI claims
+	 * they do caching even without this key, but testing shows that without this key
+	 * OpenAI doesn't do prompt prefix caching. OpenAI says this should be an end-user
+	 * identifier, so in plugin we can use random UUID, while in server we can use
+	 * deviceId hash.
 	 * @param webSearchOptions Options for web search.
 	 * @param verbosity Controls the verbosity of the model's response.
 	 */

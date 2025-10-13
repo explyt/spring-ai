@@ -180,7 +180,8 @@ public class OpenAiApiIT {
 
 		ChatCompletionRequest request = new ChatCompletionRequest(List.of(chatCompletionMessage), // messages
 				modelName.getValue(), null, null, null, null, null, null, null, null, null, null, null, null, null,
-				null, null, null, false, null, 1.0, null, null, null, null, null, null, null, "low", ChatCompletionRequest.DEFAULT_PROMPT_CACHE_KEY);
+				null, null, null, false, null, 1.0, null, null, null, null, null, null, null, "low",
+				ChatCompletionRequest.DEFAULT_PROMPT_CACHE_KEY);
 
 		ResponseEntity<ChatCompletion> response = this.openAiApi.chatCompletionEntity(request);
 
