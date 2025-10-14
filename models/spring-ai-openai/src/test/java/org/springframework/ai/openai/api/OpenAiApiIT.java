@@ -81,7 +81,7 @@ class OpenAiApiIT {
 				ChatCompletionMessage.Role.USER);
 		ChatCompletionRequest request = new ChatCompletionRequest(List.of(userMessage), "gpt-5", null, null, null, null,
 				null, null, null, null, null, null, null, null, null, null, null, null, false, null, null, null, null,
-				null, null, null, "high", null, null, null, null, null);
+				null, null, null, "low", null, null, ChatCompletionRequest.DEFAULT_PROMPT_CACHE_KEY, null, null);
 		ResponseEntity<ChatCompletion> response = this.openAiApi.chatCompletionEntity(request);
 
 		assertThat(response).isNotNull();
@@ -185,7 +185,7 @@ class OpenAiApiIT {
 
 		ChatCompletionRequest request = new ChatCompletionRequest(List.of(chatCompletionMessage), // messages
 				modelName.getValue(), null, null, null, null, null, null, null, null, null, null, null, null, null,
-				null, null, null, false, null, 1.0, null, null, null, null, null, null, null, "low", null, null, null);
+				null, null, null, false, null, 1.0, null, null, null, null, null, null, null, "low", ChatCompletionRequest.DEFAULT_PROMPT_CACHE_KEY, null, null);
 
 		ResponseEntity<ChatCompletion> response = this.openAiApi.chatCompletionEntity(request);
 

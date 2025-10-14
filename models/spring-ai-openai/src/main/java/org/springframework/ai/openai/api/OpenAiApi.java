@@ -20,6 +20,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -1113,6 +1114,11 @@ public class OpenAiApi {
 	 * @param reasoningEffort Constrains effort on reasoning for reasoning models.
 	 * Currently supported values are low, medium, and high. Reducing reasoning effort can
 	 * result in faster responses and fewer tokens used on reasoning in a response.
+	 * @param promptCacheKey Key used by OpenAI for caching prompt prefixes. OpenAI claims
+	 * they do caching even without this key, but testing shows that without this key
+	 * OpenAI doesn't do prompt prefix caching. OpenAI says this should be an end-user
+	 * identifier, so in plugin we can use random UUID, while in server we can use
+	 * deviceId hash.
 	 * @param webSearchOptions Options for web search.
 	 * @param verbosity Controls the verbosity of the model's response.
 	 */
@@ -1151,6 +1157,8 @@ public class OpenAiApi {
 			@JsonProperty("safety_identifier") String safetyIdentifier,
 			@JsonProperty(value = "extra_body", access = JsonProperty.Access.WRITE_ONLY) Map<String, Object> extraBody) {
 
+		public static final String DEFAULT_PROMPT_CACHE_KEY = UUID.randomUUID().toString();
+
 		/**
 		 * Compact constructor that ensures extraBody is initialized as a mutable HashMap
 		 * when null, enabling @JsonAnySetter to populate it during deserialization.
@@ -1171,7 +1179,7 @@ public class OpenAiApi {
 		public ChatCompletionRequest(List<ChatCompletionMessage> messages, String model, Double temperature) {
 			this(messages, model, null, null, null, null, null, null, null, null, null, null, null, null, null,
 					null, null, null, false, null, temperature, null,
-					null, null, null, null, null, null, null, null, null, null);
+					null, null, null, null, null, null, null, DEFAULT_PROMPT_CACHE_KEY, null, null);
 		}
 
 		/**
@@ -1185,7 +1193,7 @@ public class OpenAiApi {
 			this(messages, model, null, null, null, null, null, null,
 					null, null, null, List.of(OutputModality.AUDIO, OutputModality.TEXT), audio, null, null,
 					null, null, null, stream, null, null, null,
-					null, null, null, null, null, null, null, null, null, null);
+					null, null, null, null, null, null, null, DEFAULT_PROMPT_CACHE_KEY, null, null);
 		}
 
 		/**
@@ -1200,7 +1208,7 @@ public class OpenAiApi {
 		public ChatCompletionRequest(List<ChatCompletionMessage> messages, String model, Double temperature, boolean stream) {
 			this(messages, model, null, null, null, null, null, null, null, null, null,
 					null, null, null, null, null, null, null, stream, null, temperature, null,
-					null, null, null, null, null, null, null, null, null, null);
+					null, null, null, null, null, null, null, DEFAULT_PROMPT_CACHE_KEY, null, null);
 		}
 
 		/**
@@ -1216,7 +1224,7 @@ public class OpenAiApi {
 				List<FunctionTool> tools, Object toolChoice) {
 			this(messages, model, null, null, null, null, null, null, null, null, null,
 					null, null, null, null, null, null, null, false, null, 0.8, null,
-					tools, toolChoice, null, null, null, null, null, null, null, null);
+					tools, toolChoice, null, null, null, null, null, DEFAULT_PROMPT_CACHE_KEY, null, null);
 		}
 
 		/**
@@ -1229,7 +1237,7 @@ public class OpenAiApi {
 		public ChatCompletionRequest(List<ChatCompletionMessage> messages, Boolean stream) {
 			this(messages, null, null, null, null, null, null, null, null, null, null, null, null, null,
 				null, null, null, null, stream, null, null, null, null, null, null, null, null, null,
-				null, null, null, null);
+				null, DEFAULT_PROMPT_CACHE_KEY, null, null);
 		}
 
 		/**
@@ -1243,7 +1251,7 @@ public class OpenAiApi {
 					this.topLogprobs, this.maxTokens, this.maxCompletionTokens, this.n, this.outputModalities, this.audioParameters, this.presencePenalty,
 					this.responseFormat, this.seed, this.serviceTier, this.stop, this.stream, streamOptions, this.temperature, this.topP,
 					this.tools, this.toolChoice, this.parallelToolCalls, this.user, this.reasoningEffort, this.webSearchOptions, this.verbosity,
-					this.promptCacheKey, this.safetyIdentifier, this.extraBody);
+					DEFAULT_PROMPT_CACHE_KEY, this.safetyIdentifier, this.extraBody);
 		}
 
 		/**
