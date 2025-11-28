@@ -533,12 +533,14 @@ public final class AnthropicApi {
 
 		public ChatCompletionRequest(String model, List<AnthropicMessage> messages, String system, Integer maxTokens,
 				Double temperature, Boolean stream) {
-			this(model, messages, system, maxTokens, null, null, stream, temperature, null, null, null, null, new CacheControl());
+			this(model, messages, system, maxTokens, null, null, stream, temperature, null, null, null, null,
+					new CacheControl());
 		}
 
 		public ChatCompletionRequest(String model, List<AnthropicMessage> messages, String system, Integer maxTokens,
 				List<String> stopSequences, Double temperature, Boolean stream) {
-			this(model, messages, system, maxTokens, null, stopSequences, stream, temperature, null, null, null, null, new CacheControl());
+			this(model, messages, system, maxTokens, null, stopSequences, stream, temperature, null, null, null, null,
+					new CacheControl());
 		}
 
 		public static ChatCompletionRequestBuilder builder() {
@@ -705,7 +707,8 @@ public final class AnthropicApi {
 
 		public ChatCompletionRequest build() {
 			return new ChatCompletionRequest(this.model, this.messages, this.system, this.maxTokens, this.metadata,
-					this.stopSequences, this.stream, this.temperature, this.topP, this.topK, this.tools, this.thinking, this.cacheControl);
+					this.stopSequences, this.stream, this.temperature, this.topP, this.topK, this.tools, this.thinking,
+					this.cacheControl);
 		}
 
 	}
