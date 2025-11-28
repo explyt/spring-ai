@@ -526,17 +526,19 @@ public final class AnthropicApi {
 		@JsonProperty("top_p") Double topP,
 		@JsonProperty("top_k") Integer topK,
 		@JsonProperty("tools") List<Tool> tools,
-		@JsonProperty("thinking") ThinkingConfig thinking) {
+		@JsonProperty("thinking") ThinkingConfig thinking,
+		@JsonProperty("cache_control") CacheControl cacheControl
+	) {
 		// @formatter:on
 
 		public ChatCompletionRequest(String model, List<AnthropicMessage> messages, String system, Integer maxTokens,
 				Double temperature, Boolean stream) {
-			this(model, messages, system, maxTokens, null, null, stream, temperature, null, null, null, null);
+			this(model, messages, system, maxTokens, null, null, stream, temperature, null, null, null, null, new CacheControl());
 		}
 
 		public ChatCompletionRequest(String model, List<AnthropicMessage> messages, String system, Integer maxTokens,
 				List<String> stopSequences, Double temperature, Boolean stream) {
-			this(model, messages, system, maxTokens, null, stopSequences, stream, temperature, null, null, null, null);
+			this(model, messages, system, maxTokens, null, stopSequences, stream, temperature, null, null, null, null, new CacheControl());
 		}
 
 		public static ChatCompletionRequestBuilder builder() {
@@ -572,6 +574,12 @@ public final class AnthropicApi {
 				@JsonProperty("budget_tokens") Integer budgetTokens) {
 		}
 
+		@JsonInclude(Include.NON_NULL)
+		public record CacheControl(@JsonProperty("type") String type) {
+			public CacheControl() {
+				this("ephemeral");
+			}
+		}
 	}
 
 	public static final class ChatCompletionRequestBuilder {
@@ -599,6 +607,8 @@ public final class AnthropicApi {
 		private List<Tool> tools;
 
 		private ChatCompletionRequest.ThinkingConfig thinking;
+
+		private ChatCompletionRequest.CacheControl cacheControl;
 
 		private ChatCompletionRequestBuilder() {
 		}
@@ -683,6 +693,11 @@ public final class AnthropicApi {
 			return this;
 		}
 
+		public ChatCompletionRequestBuilder thinking(ChatCompletionRequest.CacheControl cacheControl) {
+			this.cacheControl = cacheControl;
+			return this;
+		}
+
 		public ChatCompletionRequestBuilder thinking(ThinkingType type, Integer budgetTokens) {
 			this.thinking = new ChatCompletionRequest.ThinkingConfig(type, budgetTokens);
 			return this;
@@ -690,7 +705,7 @@ public final class AnthropicApi {
 
 		public ChatCompletionRequest build() {
 			return new ChatCompletionRequest(this.model, this.messages, this.system, this.maxTokens, this.metadata,
-					this.stopSequences, this.stream, this.temperature, this.topP, this.topK, this.tools, this.thinking);
+					this.stopSequences, this.stream, this.temperature, this.topP, this.topK, this.tools, this.thinking, this.cacheControl);
 		}
 
 	}
