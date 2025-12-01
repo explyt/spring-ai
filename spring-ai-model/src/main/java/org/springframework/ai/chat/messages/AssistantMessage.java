@@ -146,7 +146,7 @@ public class AssistantMessage extends AbstractMessage implements MediaContent {
 	}
 
 	public String getReasoningContent() {
-		return reasoningContent;
+		return this.reasoningContent == null ? "" : this.reasoningContent;
 	}
 
 	public static Builder builder() {
