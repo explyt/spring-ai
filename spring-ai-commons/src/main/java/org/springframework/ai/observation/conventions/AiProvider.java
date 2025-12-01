@@ -104,7 +104,7 @@ public enum AiProvider {
 	 * AI system provided by Google Genai API.
 	 */
 	GOOGLE_GENAI_AI("google_genai"),
-	
+
 	/**
 	 * AI system provided by Google Gemini API.
 	 */

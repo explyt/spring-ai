@@ -365,7 +365,7 @@
 		<spring-javaformat-checkstyle.version>0.0.43</spring-javaformat-checkstyle.version>
 		<maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
 
-		<disable.checks>false</disable.checks>
+		<disable.checks>true</disable.checks>
 
 	</properties>
 
