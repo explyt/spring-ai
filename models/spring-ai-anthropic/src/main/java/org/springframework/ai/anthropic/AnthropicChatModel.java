@@ -475,6 +475,10 @@ public class AnthropicChatModel implements ChatModel {
 			requestOptions.setToolNames(this.defaultOptions.getToolNames());
 			requestOptions.setToolCallbacks(this.defaultOptions.getToolCallbacks());
 			requestOptions.setToolContext(this.defaultOptions.getToolContext());
+
+			// Merge cache strategy and TTL (also @JsonIgnore fields)
+			requestOptions.setCacheStrategy(this.defaultOptions.getCacheStrategy());
+			requestOptions.setCacheTtl(this.defaultOptions.getCacheTtl());
 		}
 
 		ToolCallingChatOptions.validateToolCallbacks(requestOptions.getToolCallbacks());
