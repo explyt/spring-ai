@@ -603,8 +603,7 @@ public class AnthropicChatModel implements ChatModel {
 			requestOptions.setSkillContainer(this.defaultOptions.getSkillContainer());
 
 			// Merge cache strategy and TTL (also @JsonIgnore fields)
-			requestOptions.setCacheStrategy(this.defaultOptions.getCacheStrategy());
-			requestOptions.setCacheTtl(this.defaultOptions.getCacheTtl());
+			requestOptions.setCacheOptions(this.defaultOptions.getCacheOptions());
 		}
 
 		ToolCallingChatOptions.validateToolCallbacks(requestOptions.getToolCallbacks());

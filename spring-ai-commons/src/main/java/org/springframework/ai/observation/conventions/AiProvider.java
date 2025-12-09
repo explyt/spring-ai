@@ -51,6 +51,11 @@ public enum AiProvider {
 	DEEPSEEK("deepseek"),
 
 	/**
+	 * AI system provided by Google Gemini API.
+	 */
+	GEMINI("gemini"),
+
+	/**
 	 * AI system provided by Google Gen AI.
 	 */
 	GOOGLE_GENAI_AI("google_genai"),
@@ -103,17 +108,7 @@ public enum AiProvider {
 	/**
 	 * AI system provided by Zhipuai.
 	 */
-	ZHIPUAI("zhipuai"),
-
-	/**
-	 * AI system provided by Google Genai API.
-	 */
-	GOOGLE_GENAI_AI("google_genai"),
-
-	/**
-	 * AI system provided by Google Gemini API.
-	 */
-	GEMINI("gemini"),
+	ZHIPUAI("zhipuai");
 
 	private final String value;
 

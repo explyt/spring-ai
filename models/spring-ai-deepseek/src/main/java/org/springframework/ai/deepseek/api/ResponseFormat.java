@@ -58,6 +58,13 @@ public final class ResponseFormat {
 		this.type = type;
 	}
 
+	/**
+	 * Public no-arg constructor required by Jackson for deserialization when
+	 * ResponseFormat is reconstructed from a Map.
+	 */
+	public ResponseFormat() {
+	}
+
 	private ResponseFormat(Type type) {
 		this.type = type;
 	}
