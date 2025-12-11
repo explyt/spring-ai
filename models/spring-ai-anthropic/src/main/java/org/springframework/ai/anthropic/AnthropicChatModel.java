@@ -724,8 +724,8 @@ public class AnthropicChatModel implements ChatModel {
 			citationDocuments = anthropicOptions.getCitationDocuments();
 		}
 
-		boolean isToolResult = !allMessages.isEmpty() &&
-				allMessages.get(allMessages.size() - 1).getMessageType() == MessageType.TOOL;
+		boolean isToolResult = !allMessages.isEmpty()
+				&& allMessages.get(allMessages.size() - 1).getMessageType() == MessageType.TOOL;
 		List<AnthropicMessage> result = new ArrayList<>();
 		for (int i = 0; i < allMessages.size(); i++) {
 			Message message = allMessages.get(i);
@@ -772,17 +772,19 @@ public class AnthropicChatModel implements ChatModel {
 
 				// Check for details:
 				// https://platform.claude.com/docs/en/build-with-claude/extended-thinking#the-context-window-with-extended-thinking-and-tool-use
-				if (isToolResult && i == allMessages.size() - 2 && StringUtils.hasText(assistantMessage.getReasoningContent())) {
+				if (isToolResult && i == allMessages.size() - 2
+						&& StringUtils.hasText(assistantMessage.getReasoningContent())) {
 					ContentBlock.ContentBlockBuilder builder = new ContentBlock.ContentBlockBuilder(
-							new ContentBlock(Type.THINKING, null)
-					);
+							new ContentBlock(Type.THINKING, null));
 					builder.thinking(assistantMessage.getReasoningContent());
 					ContentBlock thinkingContentBlock = builder.build();
-					contentBlocks.add(cacheAwareContentBlock(thinkingContentBlock, messageType, cacheEligibilityResolver));
+					contentBlocks
+						.add(cacheAwareContentBlock(thinkingContentBlock, messageType, cacheEligibilityResolver));
 				}
 
 				if (StringUtils.hasText(message.getText())) {
-					contentBlocks.add(cacheAwareContentBlock(new ContentBlock(message.getText()), messageType, cacheEligibilityResolver));
+					contentBlocks.add(cacheAwareContentBlock(new ContentBlock(message.getText()), messageType,
+							cacheEligibilityResolver));
 				}
 				if (!CollectionUtils.isEmpty(assistantMessage.getToolCalls())) {
 					for (AssistantMessage.ToolCall toolCall : assistantMessage.getToolCalls()) {
