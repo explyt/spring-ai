@@ -439,7 +439,7 @@ public class DeepSeekChatModel implements ChatModel {
 						ChatCompletionMessage.Role.valueOf(message.getMessageType().name())));
 			}
 			else if (message.getMessageType() == MessageType.ASSISTANT) {
-				var assistantMessage = (DeepSeekAssistantMessage) message;
+				var assistantMessage = (AssistantMessage) message;
 				List<ToolCall> toolCalls = null;
 				if (!CollectionUtils.isEmpty(assistantMessage.getToolCalls())) {
 					toolCalls = assistantMessage.getToolCalls().stream().map(toolCall -> {
@@ -447,7 +447,11 @@ public class DeepSeekChatModel implements ChatModel {
 						return new ToolCall(toolCall.id(), toolCall.type(), function);
 					}).toList();
 				}
-				Boolean isPrefixAssistantMessage = Boolean.TRUE.equals(assistantMessage.getPrefix());
+				Boolean isPrefixAssistantMessage = null;
+				if (message instanceof DeepSeekAssistantMessage
+						&& Boolean.TRUE.equals(((DeepSeekAssistantMessage) message).getPrefix())) {
+					isPrefixAssistantMessage = true;
+				}
 				return List
 					.of(new ChatCompletionMessage(assistantMessage.getText(), ChatCompletionMessage.Role.ASSISTANT,
 							null, null, toolCalls, isPrefixAssistantMessage, assistantMessage.getReasoningContent()));
