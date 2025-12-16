@@ -25,6 +25,7 @@ import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.messages.Message;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -433,44 +434,67 @@ public class DeepSeekChatModel implements ChatModel {
 	 * Accessible for testing.
 	 */
 	ChatCompletionRequest createRequest(Prompt prompt, boolean stream) {
-		List<ChatCompletionMessage> chatCompletionMessages = prompt.getInstructions().stream().map(message -> {
-			if (message.getMessageType() == MessageType.USER || message.getMessageType() == MessageType.SYSTEM) {
-				return List.of(new ChatCompletionMessage(message.getText(),
-						ChatCompletionMessage.Role.valueOf(message.getMessageType().name())));
+		// Find the index of the last USER message
+		int lastUserMessageIndex = -1;
+		List<Message> instructions = prompt.getInstructions();
+		for (int i = instructions.size() - 1; i >= 0; i--) {
+			if (instructions.get(i).getMessageType() == MessageType.USER) {
+				lastUserMessageIndex = i;
+				break;
 			}
-			else if (message.getMessageType() == MessageType.ASSISTANT) {
-				var assistantMessage = (AssistantMessage) message;
-				List<ToolCall> toolCalls = null;
-				if (!CollectionUtils.isEmpty(assistantMessage.getToolCalls())) {
-					toolCalls = assistantMessage.getToolCalls().stream().map(toolCall -> {
-						var function = new ChatCompletionFunction(toolCall.name(), toolCall.arguments());
-						return new ToolCall(toolCall.id(), toolCall.type(), function);
-					}).toList();
-				}
-				Boolean isPrefixAssistantMessage = null;
-				if (message instanceof DeepSeekAssistantMessage
-						&& Boolean.TRUE.equals(((DeepSeekAssistantMessage) message).getPrefix())) {
-					isPrefixAssistantMessage = true;
-				}
-				return List
-					.of(new ChatCompletionMessage(assistantMessage.getText(), ChatCompletionMessage.Role.ASSISTANT,
-							null, null, toolCalls, isPrefixAssistantMessage, assistantMessage.getReasoningContent()));
-			}
-			else if (message.getMessageType() == MessageType.TOOL) {
-				ToolResponseMessage toolMessage = (ToolResponseMessage) message;
+		}
 
-				toolMessage.getResponses()
-					.forEach(response -> Assert.isTrue(response.id() != null, "ToolResponseMessage must have an id"));
-				return toolMessage.getResponses()
-					.stream()
-					.map(tr -> new ChatCompletionMessage(tr.responseData(), ChatCompletionMessage.Role.TOOL, tr.name(),
-							tr.id(), null))
-					.toList();
-			}
-			else {
-				throw new IllegalArgumentException("Unsupported message type: " + message.getMessageType());
-			}
-		}).flatMap(List::stream).toList();
+		final int userMessageIndex = lastUserMessageIndex;
+		List<ChatCompletionMessage> chatCompletionMessages = prompt.getInstructions()
+			.stream()
+			.map(message -> new Object[] { message, instructions.indexOf(message) })
+			.map(pair -> {
+				var message = (Message) pair[0];
+				int index = (int) pair[1];
+				boolean afterLastUser = userMessageIndex != -1 && index > userMessageIndex;
+
+				if (message.getMessageType() == MessageType.USER || message.getMessageType() == MessageType.SYSTEM) {
+					return List.of(new ChatCompletionMessage(message.getText(),
+							ChatCompletionMessage.Role.valueOf(message.getMessageType().name())));
+				}
+				else if (message.getMessageType() == MessageType.ASSISTANT) {
+					var assistantMessage = (AssistantMessage) message;
+					List<ToolCall> toolCalls = null;
+					if (!CollectionUtils.isEmpty(assistantMessage.getToolCalls())) {
+						toolCalls = assistantMessage.getToolCalls().stream().map(toolCall -> {
+							var function = new ChatCompletionFunction(toolCall.name(), toolCall.arguments());
+							return new ToolCall(toolCall.id(), toolCall.type(), function);
+						}).toList();
+					}
+					Boolean isPrefixAssistantMessage = null;
+					if (message instanceof DeepSeekAssistantMessage
+							&& Boolean.TRUE.equals(((DeepSeekAssistantMessage) message).getPrefix())) {
+						isPrefixAssistantMessage = true;
+					}
+					// Keep reasoningContent only for messages after the last USER message
+					String reasoningContent = afterLastUser ? assistantMessage.getReasoningContent() : null;
+					return List
+						.of(new ChatCompletionMessage(assistantMessage.getText(), ChatCompletionMessage.Role.ASSISTANT,
+								null, null, toolCalls, isPrefixAssistantMessage, reasoningContent));
+				}
+				else if (message.getMessageType() == MessageType.TOOL) {
+					ToolResponseMessage toolMessage = (ToolResponseMessage) message;
+
+					toolMessage.getResponses()
+						.forEach(response -> Assert.isTrue(response.id() != null,
+								"ToolResponseMessage must have an id"));
+					return toolMessage.getResponses()
+						.stream()
+						.map(tr -> new ChatCompletionMessage(tr.responseData(), ChatCompletionMessage.Role.TOOL,
+								tr.name(), tr.id(), null))
+						.toList();
+				}
+				else {
+					throw new IllegalArgumentException("Unsupported message type: " + message.getMessageType());
+				}
+			})
+			.flatMap(List::stream)
+			.toList();
 
 		ChatCompletionRequest request = new ChatCompletionRequest(chatCompletionMessages, stream);
 
