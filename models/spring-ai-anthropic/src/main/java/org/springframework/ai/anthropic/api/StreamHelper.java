@@ -233,7 +233,9 @@ public class StreamHelper {
 				contentBlockReference.set(new ChatCompletionResponseBuilder());
 			}
 			contentBlockReference.get().withType(event.type().name()).withContent(List.of());
-			logger.warn("Unhandled event type: {}", event.type().name());
+			if (!event.type().equals(EventType.CONTENT_BLOCK_STOP)) {
+				logger.warn("Unhandled event type: {}", event.type().name());
+			}
 		}
 
 		return contentBlockReference.get().build();

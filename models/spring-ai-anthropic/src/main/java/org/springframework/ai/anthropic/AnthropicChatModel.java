@@ -331,12 +331,12 @@ public class AnthropicChatModel implements ChatModel {
 							citationContext);
 					generations.add(textGeneration);
 					break;
-				case THINKING, THINKING_DELTA:
+				case THINKING, THINKING_DELTA, SIGNATURE_DELTA:
 					Map<String, Object> thinkingProperties = new HashMap<>();
 					thinkingProperties.put("signature", content.signature());
 					generations.add(new Generation(
 							AssistantMessage.builder()
-								.content(content.thinking())
+								.reasoningContent(content.thinking())
 								.properties(thinkingProperties)
 								.build(),
 							ChatGenerationMetadata.builder().finishReason(chatCompletion.stopReason()).build()));
@@ -670,6 +670,7 @@ public class AnthropicChatModel implements ChatModel {
 			case TOOL_RESULT -> contentBlock.content();
 			case TOOL_USE -> JsonParser.toJson(contentBlock.input());
 			case THINKING, THINKING_DELTA -> contentBlock.thinking();
+			case SIGNATURE_DELTA -> contentBlock.signature();
 			case REDACTED_THINKING -> contentBlock.data();
 			default -> null;
 		};
@@ -726,6 +727,14 @@ public class AnthropicChatModel implements ChatModel {
 
 		boolean isToolResult = !allMessages.isEmpty()
 				&& allMessages.get(allMessages.size() - 1).getMessageType() == MessageType.TOOL;
+		int assistantAfterLastUserMessageIndex = -1;
+		for (int i = allMessages.size() - 1; i > 0; i--) {
+			if (allMessages.get(i).getMessageType() == MessageType.ASSISTANT
+					&& allMessages.get(i - 1).getMessageType() == MessageType.USER) {
+				assistantAfterLastUserMessageIndex = i;
+				break;
+			}
+		}
 		List<AnthropicMessage> result = new ArrayList<>();
 		for (int i = 0; i < allMessages.size(); i++) {
 			Message message = allMessages.get(i);
@@ -772,14 +781,13 @@ public class AnthropicChatModel implements ChatModel {
 
 				// Check for details:
 				// https://platform.claude.com/docs/en/build-with-claude/extended-thinking#the-context-window-with-extended-thinking-and-tool-use
-				if (isToolResult && i == allMessages.size() - 2
-						&& StringUtils.hasText(assistantMessage.getReasoningContent())) {
+				if (isToolResult && i == assistantAfterLastUserMessageIndex) {
 					ContentBlock.ContentBlockBuilder builder = new ContentBlock.ContentBlockBuilder(
 							new ContentBlock(Type.THINKING, null));
 					builder.thinking(assistantMessage.getReasoningContent());
+					builder.signature((String) assistantMessage.getMetadata().getOrDefault("signature", ""));
 					ContentBlock thinkingContentBlock = builder.build();
-					contentBlocks
-						.add(cacheAwareContentBlock(thinkingContentBlock, messageType, cacheEligibilityResolver));
+					contentBlocks.add(thinkingContentBlock);
 				}
 
 				if (StringUtils.hasText(message.getText())) {
