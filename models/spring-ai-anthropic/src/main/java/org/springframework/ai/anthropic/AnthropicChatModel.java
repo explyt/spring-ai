@@ -781,7 +781,8 @@ public class AnthropicChatModel implements ChatModel {
 
 				// Check for details:
 				// https://platform.claude.com/docs/en/build-with-claude/extended-thinking#the-context-window-with-extended-thinking-and-tool-use
-				if (isToolResult && i == assistantAfterLastUserMessageIndex) {
+				if (isToolResult && i == assistantAfterLastUserMessageIndex
+						&& StringUtils.hasText(assistantMessage.getReasoningContent())) {
 					ContentBlock.ContentBlockBuilder builder = new ContentBlock.ContentBlockBuilder(
 							new ContentBlock(Type.THINKING, null));
 					builder.thinking(assistantMessage.getReasoningContent());
