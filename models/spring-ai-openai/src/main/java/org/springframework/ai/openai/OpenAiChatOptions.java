@@ -38,7 +38,6 @@ import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionRequest.AudioParameters;
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionRequest.StreamOptions;
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionRequest.ToolChoiceBuilder;
-import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionRequest.Thinking;
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionRequest.WebSearchOptions;
 import org.springframework.ai.openai.api.ResponseFormat;
 import org.springframework.ai.tool.ToolCallback;
@@ -248,12 +247,6 @@ public class OpenAiChatOptions implements ToolCallingChatOptions {
 	private @JsonProperty("prompt_cache_key") String promptCacheKey;
 
 	/**
-	 * This param is introduced to support GLM 4.7.
-	 * Switch between Preserved thinking or Interleaved thinking
-	 */
-	 private @JsonProperty("thinking") Thinking thinking;
-
-	/**
 	 * Collection of {@link ToolCallback}s to be used for tool calling in the chat completion requests.
 	 */
 	@JsonIgnore
@@ -323,7 +316,6 @@ public class OpenAiChatOptions implements ToolCallingChatOptions {
 			.verbosity(fromOptions.getVerbosity())
 			.serviceTier(fromOptions.getServiceTier())
 			.promptCacheKey(fromOptions.getPromptCacheKey())
-			.thinking(fromOptions.getThinking())
 			.build();
 	}
 
@@ -644,14 +636,6 @@ public class OpenAiChatOptions implements ToolCallingChatOptions {
 		this.promptCacheKey = promptCacheKey;
 	}
 
-	public Thinking getThinking() {
-		return thinking;
-	}
-
-	public void setThinking(Thinking thinking) {
-		this.thinking = thinking;
-	}
-
 	@Override
 	public OpenAiChatOptions copy() {
 		return OpenAiChatOptions.fromOptions(this);
@@ -665,7 +649,7 @@ public class OpenAiChatOptions implements ToolCallingChatOptions {
 				this.user, this.parallelToolCalls, this.toolCallbacks, this.toolNames, this.httpHeaders,
 				this.internalToolExecutionEnabled, this.toolContext, this.outputModalities, this.outputAudio,
 				this.store, this.metadata, this.reasoningEffort, this.webSearchOptions, this.serviceTier,
-				this.promptCacheKey, this.thinking);
+				this.promptCacheKey);
 	}
 
 	@Override
@@ -701,8 +685,7 @@ public class OpenAiChatOptions implements ToolCallingChatOptions {
 				&& Objects.equals(this.webSearchOptions, other.webSearchOptions)
 				&& Objects.equals(this.verbosity, other.verbosity)
 				&& Objects.equals(this.serviceTier, other.serviceTier)
-				&& Objects.equals(this.promptCacheKey, other.promptCacheKey)
-				&& Objects.equals(this.thinking, other.thinking);
+				&& Objects.equals(this.promptCacheKey, other.promptCacheKey);
 	}
 
 	@Override
@@ -972,11 +955,6 @@ public class OpenAiChatOptions implements ToolCallingChatOptions {
 
 		public Builder promptCacheKey(String promptCacheKey) {
 			this.options.promptCacheKey = promptCacheKey;
-			return this;
-		}
-
-		public Builder thinking(Thinking thinking) {
-			this.options.thinking = thinking;
 			return this;
 		}
 
