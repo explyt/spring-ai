@@ -20,7 +20,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -1487,7 +1486,7 @@ public class OpenAiApi {
 			@JsonProperty("refusal") String refusal,
 			@JsonProperty("audio") AudioOutput audioOutput,
 			@JsonProperty("annotations") List<Annotation> annotations,
-       		@JsonProperty(value = "reasoning_content", access = JsonProperty.Access.WRITE_ONLY) String reasoningContent,
+       		@JsonProperty("reasoning_content") String reasoningContent,
 			@JsonProperty(value = "reasoning", access = JsonProperty.Access.WRITE_ONLY) String reasoning
 	) { // @formatter:on
 
