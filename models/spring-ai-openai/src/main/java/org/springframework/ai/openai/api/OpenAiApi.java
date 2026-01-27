@@ -20,7 +20,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -1146,7 +1145,7 @@ public class OpenAiApi {
 			@JsonProperty("reasoning_effort") String reasoningEffort,
 			@JsonProperty("web_search_options") WebSearchOptions webSearchOptions,
 			@JsonProperty("verbosity") String verbosity,
-			@JsonProperty("prompt_cache_key") String promptCacheKey)  {
+			@JsonProperty("prompt_cache_key") String promptCacheKey) {
 
 		/**
 		 * Shortcut constructor for a chat completion request with the given messages, model and temperature.
@@ -1229,7 +1228,7 @@ public class OpenAiApi {
 			return new ChatCompletionRequest(this.messages, this.model, this.store, this.metadata, this.frequencyPenalty, this.logitBias, this.logprobs,
 			this.topLogprobs, this.maxTokens, this.maxCompletionTokens, this.n, this.outputModalities, this.audioParameters, this.presencePenalty,
 			this.responseFormat, this.seed, this.serviceTier, this.stop, this.stream, streamOptions, this.temperature, this.topP,
-			this.tools, this.toolChoice, this.parallelToolCalls, this.user, this.reasoningEffort, this.webSearchOptions, this.verbosity, null);
+			this.tools, this.toolChoice, this.parallelToolCalls, this.user, this.reasoningEffort, this.webSearchOptions, this.verbosity, this.promptCacheKey);
 		}
 
 		/**
@@ -1442,7 +1441,7 @@ public class OpenAiApi {
 			@JsonProperty("refusal") String refusal,
 			@JsonProperty("audio") AudioOutput audioOutput,
 			@JsonProperty("annotations") List<Annotation> annotations,
-       		@JsonProperty(value = "reasoning_content", access = JsonProperty.Access.WRITE_ONLY) String reasoningContent,
+       		@JsonProperty("reasoning_content") String reasoningContent,
 			@JsonProperty(value = "reasoning", access = JsonProperty.Access.WRITE_ONLY) String reasoning
 	) { // @formatter:on
 
