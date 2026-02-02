@@ -96,7 +96,8 @@ public class CacheEligibilityResolver {
 			case TOOLS_ONLY -> Set.of(); // No message types cached, only tool definitions
 			// For CONVERSATION_HISTORY and AGENTIC_TOOL_USE, all message types are
 			// potentially eligible for caching. However, for AGENTIC_TOOL_USE the actual
-			// cache application is controlled by agenticBreakpointIndices in buildMessages(),
+			// cache application is controlled by agenticBreakpointIndices in
+			// buildMessages(),
 			// which selects only specific messages (last TOOL or stable ASSISTANT) for
 			// breakpoints.
 			case CONVERSATION_HISTORY, AGENTIC_TOOL_USE -> Set.of(MessageType.values());

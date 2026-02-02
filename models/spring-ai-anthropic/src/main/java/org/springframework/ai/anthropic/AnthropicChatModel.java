@@ -81,7 +81,6 @@ import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.ai.util.json.JsonParser;
 import org.springframework.http.ResponseEntity;
 import org.springframework.retry.support.RetryTemplate;
-import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.MultiValueMap;
@@ -718,8 +717,7 @@ public class AnthropicChatModel implements ChatModel {
 			if (prompt.getOptions() instanceof AnthropicChatOptions anthropicChatOptions) {
 				requestModel = anthropicChatOptions.getModel();
 			}
-			agenticBreakpointIndices = findAgenticBreakpointCandidates(allMessages, cacheEligibilityResolver,
-					requestModel);
+			agenticBreakpointIndices = findAgenticBreakpointCandidates(allMessages, cacheEligibilityResolver);
 		}
 
 		// Find the last user message (current question) for CONVERSATION_HISTORY strategy
@@ -892,7 +890,7 @@ public class AnthropicChatModel implements ChatModel {
 	 * @return set of message indices that should have cache breakpoints applied
 	 */
 	private Set<Integer> findAgenticBreakpointCandidates(List<Message> allMessages,
-			CacheEligibilityResolver cacheEligibilityResolver, @Nullable String requestModel) {
+			CacheEligibilityResolver cacheEligibilityResolver) {
 
 		Set<Integer> breakpointIndices = new java.util.HashSet<>();
 		int remainingBreakpoints = cacheEligibilityResolver.getRemainingBreakpoints();
@@ -907,7 +905,7 @@ public class AnthropicChatModel implements ChatModel {
 
 		int lastStableAssistantIndex = findLastStableAssistantWithoutToolCallsIndex(allMessages);
 
-		int minCacheableDelta = resolveMinCacheablePromptLength(cacheEligibilityResolver, requestModel);
+		int minCacheableDelta = resolveMinCacheablePromptLength(cacheEligibilityResolver);
 
 		// If there are no TOOL messages at all, fall back to a "dialog" mode:
 		// prefer caching a stable, large ASSISTANT block (no toolCalls).
@@ -975,23 +973,10 @@ public class AnthropicChatModel implements ChatModel {
 		return -1;
 	}
 
-	private static int resolveMinCacheablePromptLength(CacheEligibilityResolver cacheEligibilityResolver,
-			@Nullable String requestModel) {
+	private static int resolveMinCacheablePromptLength(CacheEligibilityResolver cacheEligibilityResolver) {
 		Integer override = cacheEligibilityResolver.getMinCacheablePromptLength();
 		if (override != null && override > 0) {
 			return override;
-		}
-		// Defaults based on Anthropic docs (approximate; can be overridden).
-		if (requestModel == null) {
-			return 1024;
-		}
-		// Opus 4.5 and Haiku 4.5 require 4096; Haiku 3 requires 2048; most others are
-		// 1024.
-		if (requestModel.contains("opus-4-5") || requestModel.contains("haiku-4-5")) {
-			return 4096;
-		}
-		if (requestModel.contains("haiku") && requestModel.contains("3")) {
-			return 2048;
 		}
 		return 1024;
 	}

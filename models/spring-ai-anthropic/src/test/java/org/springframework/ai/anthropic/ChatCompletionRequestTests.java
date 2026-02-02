@@ -290,7 +290,8 @@ public class ChatCompletionRequestTests {
 
 		var promptOptions = AnthropicChatOptions.builder().cacheOptions(cacheOptions).build();
 
-		// Realistic agentic loop: USER -> ASSISTANT(toolCalls) -> TOOL -> ASSISTANT(toolCalls) -> TOOL
+		// Realistic agentic loop: USER -> ASSISTANT(toolCalls) -> TOOL ->
+		// ASSISTANT(toolCalls) -> TOOL
 		List<Message> messages = List.of(new UserMessage("Analyze the codebase and find bugs"),
 				AssistantMessage.builder()
 					.content("I'll start by reading the main file")
@@ -298,8 +299,8 @@ public class ChatCompletionRequestTests {
 						.of(new AssistantMessage.ToolCall("call-1", "tool_use", "read_file", "{\"path\":\"main.py\"}")))
 					.build(),
 				ToolResponseMessage.builder()
-					.responses(List.of(
-							new ToolResponseMessage.ToolResponse("call-1", "read_file", "def main(): print('hello')")))
+					.responses(List
+						.of(new ToolResponseMessage.ToolResponse("call-1", "read_file", "def main(): print('hello')")))
 					.build(),
 				AssistantMessage.builder()
 					.content("Now I'll check the tests")
@@ -307,8 +308,8 @@ public class ChatCompletionRequestTests {
 						.of(new AssistantMessage.ToolCall("call-2", "tool_use", "read_file", "{\"path\":\"test.py\"}")))
 					.build(),
 				ToolResponseMessage.builder()
-					.responses(List.of(
-							new ToolResponseMessage.ToolResponse("call-2", "read_file", "def test_main(): assert True")))
+					.responses(List.of(new ToolResponseMessage.ToolResponse("call-2", "read_file",
+							"def test_main(): assert True")))
 					.build());
 
 		var request = client.createRequest(new Prompt(messages, promptOptions), false);
