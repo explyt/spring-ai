@@ -121,6 +121,36 @@ public enum AnthropicCacheStrategy {
 	 * entire conversation cache due to cascade invalidation. Tool and system stability is
 	 * critical for this strategy.
 	 */
-	CONVERSATION_HISTORY
+	CONVERSATION_HISTORY,
+
+	/**
+	 * Optimized caching strategy for agentic tool-use loops. Places a cache breakpoint on
+	 * the optimal message in the conversation, allowing the cache boundary to advance as
+	 * tool results are appended.
+	 * <p>
+	 * Use this when:
+	 * <ul>
+	 * <li>Running multi-iteration tool loops (agentic mode)</li>
+	 * <li>Conversation history grows with ASSISTANT(tool_use) and TOOL(tool_result)
+	 * blocks</li>
+	 * <li>The initial USER request is stable across the loop</li>
+	 * </ul>
+	 * <p>
+	 * <strong>Behavior:</strong> Uses backward-scan to find the optimal breakpoint:
+	 * <ul>
+	 * <li>Primary target: the last TOOL message (tool_result)</li>
+	 * <li>Fallback: if a stable ASSISTANT message (without toolCalls) exists after the
+	 * last TOOL and the token delta since the last TOOL meets the minimum cacheable
+	 * threshold, the breakpoint moves to that ASSISTANT message</li>
+	 * <li>Skips USER messages (mutable content, e.g., dynamic file lists)</li>
+	 * <li>Skips ASSISTANT messages with toolCalls (tool_use JSON is unstable for
+	 * caching)</li>
+	 * </ul>
+	 * <p>
+	 * <strong>Important:</strong> This strategy is designed for append-only conversation
+	 * histories where tool results grow over multiple iterations. All content before the
+	 * breakpoint will be cached by Anthropic.
+	 */
+	AGENTIC_TOOL_USE
 
 }

@@ -62,23 +62,31 @@ public class CacheEligibilityResolver {
 
 	private final Function<String, Integer> contentLengthFunction;
 
+	private final Function<String, Integer> tokenLengthFunction;
+
 	private final Set<MessageType> cacheEligibleMessageTypes;
+
+	private final Integer minCacheablePromptLength;
 
 	public CacheEligibilityResolver(AnthropicCacheStrategy cacheStrategy,
 			Map<MessageType, AnthropicCacheTtl> messageTypeTtl, Map<MessageType, Integer> messageTypeMinContentLengths,
-			Function<String, Integer> contentLengthFunction, Set<MessageType> cacheEligibleMessageTypes) {
+			Function<String, Integer> contentLengthFunction, Function<String, Integer> tokenLengthFunction,
+			Set<MessageType> cacheEligibleMessageTypes, Integer minCacheablePromptLength) {
 		this.cacheStrategy = cacheStrategy;
 		this.messageTypeTtl = messageTypeTtl;
 		this.messageTypeMinContentLengths = messageTypeMinContentLengths;
 		this.contentLengthFunction = contentLengthFunction;
+		this.tokenLengthFunction = tokenLengthFunction;
 		this.cacheEligibleMessageTypes = cacheEligibleMessageTypes;
+		this.minCacheablePromptLength = minCacheablePromptLength;
 	}
 
 	public static CacheEligibilityResolver from(AnthropicCacheOptions anthropicCacheOptions) {
 		AnthropicCacheStrategy strategy = anthropicCacheOptions.getStrategy();
 		return new CacheEligibilityResolver(strategy, anthropicCacheOptions.getMessageTypeTtl(),
 				anthropicCacheOptions.getMessageTypeMinContentLengths(),
-				anthropicCacheOptions.getContentLengthFunction(), extractEligibleMessageTypes(strategy));
+				anthropicCacheOptions.getContentLengthFunction(), anthropicCacheOptions.getTokenLengthFunction(),
+				extractEligibleMessageTypes(strategy), anthropicCacheOptions.getMinCacheablePromptLength());
 	}
 
 	private static Set<MessageType> extractEligibleMessageTypes(AnthropicCacheStrategy anthropicCacheStrategy) {
@@ -86,7 +94,12 @@ public class CacheEligibilityResolver {
 			case NONE -> Set.of();
 			case SYSTEM_ONLY, SYSTEM_AND_TOOLS -> Set.of(MessageType.SYSTEM);
 			case TOOLS_ONLY -> Set.of(); // No message types cached, only tool definitions
-			case CONVERSATION_HISTORY -> Set.of(MessageType.values());
+			// For CONVERSATION_HISTORY and AGENTIC_TOOL_USE, all message types are
+			// potentially eligible for caching. However, for AGENTIC_TOOL_USE the actual
+			// cache application is controlled by agenticBreakpointIndices in buildMessages(),
+			// which selects only specific messages (last TOOL or stable ASSISTANT) for
+			// breakpoints.
+			case CONVERSATION_HISTORY, AGENTIC_TOOL_USE -> Set.of(MessageType.values());
 		};
 	}
 
@@ -110,12 +123,14 @@ public class CacheEligibilityResolver {
 	}
 
 	public AnthropicApi.ChatCompletionRequest.CacheControl resolveToolCacheControl() {
-		// Tool definitions are cache-eligible for TOOLS_ONLY, SYSTEM_AND_TOOLS, and
-		// CONVERSATION_HISTORY strategies. SYSTEM_ONLY caches only system messages,
-		// relying on Anthropic's cache hierarchy to implicitly cache tools.
+		// Tool definitions are cache-eligible for TOOLS_ONLY, SYSTEM_AND_TOOLS,
+		// CONVERSATION_HISTORY, and AGENTIC_TOOL_USE strategies. SYSTEM_ONLY caches only
+		// system messages, relying on Anthropic's cache hierarchy to implicitly cache
+		// tools.
 		if (this.cacheStrategy != AnthropicCacheStrategy.TOOLS_ONLY
 				&& this.cacheStrategy != AnthropicCacheStrategy.SYSTEM_AND_TOOLS
-				&& this.cacheStrategy != AnthropicCacheStrategy.CONVERSATION_HISTORY) {
+				&& this.cacheStrategy != AnthropicCacheStrategy.CONVERSATION_HISTORY
+				&& this.cacheStrategy != AnthropicCacheStrategy.AGENTIC_TOOL_USE) {
 			logger.debug("Caching not enabled for tool definition, cacheStrategy={}", this.cacheStrategy);
 			return null;
 		}
@@ -139,6 +154,30 @@ public class CacheEligibilityResolver {
 
 	public void useCacheBlock() {
 		this.cacheBreakpointTracker.use();
+	}
+
+	public AnthropicCacheStrategy getStrategy() {
+		return this.cacheStrategy;
+	}
+
+	public Function<String, Integer> getContentLengthFunction() {
+		return this.contentLengthFunction;
+	}
+
+	public Function<String, Integer> getTokenLengthFunction() {
+		return this.tokenLengthFunction;
+	}
+
+	public int getRemainingBreakpoints() {
+		return 4 - this.cacheBreakpointTracker.getCount();
+	}
+
+	public Integer getMinCacheablePromptLength() {
+		return this.minCacheablePromptLength;
+	}
+
+	public Map<MessageType, AnthropicCacheTtl> getMessageTypeTtl() {
+		return this.messageTypeTtl;
 	}
 
 }
