@@ -39,6 +39,17 @@ public class AnthropicCacheOptions {
 	private AnthropicCacheStrategy strategy = AnthropicCacheStrategy.NONE;
 
 	/**
+	 * Optional override for the minimum cacheable prompt length (in tokens) required by
+	 * the Anthropic backend for caching to take effect.
+	 * <p>
+	 * If {@code null}, the client will use model-specific defaults.
+	 * <p>
+	 * Note: this is separate from {@link #messageTypeMinContentLengths}, which controls
+	 * eligibility of an individual block for consuming a breakpoint.
+	 */
+	private Integer minCacheablePromptLength;
+
+	/**
 	 * Function to determine the content length of a message. Defaults to the length of
 	 * the string, or {@code 0} if the string is {@code null}. This is used as a proxy for
 	 * number of tokens because Anthropic does document that messages with too few tokens
@@ -48,6 +59,21 @@ public class AnthropicCacheOptions {
 	 * accurate token count if desired.
 	 */
 	private Function<String, Integer> contentLengthFunction = s -> s != null ? s.length() : 0;
+
+	/**
+	 * Function to estimate token length.
+	 * <p>
+	 * Defaults to {@code ceil(chars/4)}. This function is intended for token-based
+	 * thresholds such as {@link #minCacheablePromptLength} and agentic delta planning.
+	 * <p>
+	 * You can customize this function to use a more accurate tokenizer if desired.
+	 */
+	private Function<String, Integer> tokenLengthFunction = s -> {
+		if (s == null || s.isEmpty()) {
+			return 0;
+		}
+		return (s.length() + 3) / 4;
+	};
 
 	/**
 	 * Configure on a per {@link MessageType} basis the TTL (time-to-live) for cached
@@ -95,6 +121,22 @@ public class AnthropicCacheOptions {
 		return this.contentLengthFunction;
 	}
 
+	public Function<String, Integer> getTokenLengthFunction() {
+		return this.tokenLengthFunction;
+	}
+
+	public void setTokenLengthFunction(Function<String, Integer> tokenLengthFunction) {
+		this.tokenLengthFunction = tokenLengthFunction;
+	}
+
+	public Integer getMinCacheablePromptLength() {
+		return this.minCacheablePromptLength;
+	}
+
+	public void setMinCacheablePromptLength(Integer minCacheablePromptLength) {
+		this.minCacheablePromptLength = minCacheablePromptLength;
+	}
+
 	public void setContentLengthFunction(Function<String, Integer> contentLengthFunction) {
 		this.contentLengthFunction = contentLengthFunction;
 	}
@@ -126,8 +168,9 @@ public class AnthropicCacheOptions {
 	@Override
 	public String toString() {
 		return "AnthropicCacheOptions{" + "strategy=" + this.strategy + ", contentLengthFunction="
-				+ this.contentLengthFunction + ", messageTypeTtl=" + this.messageTypeTtl
-				+ ", messageTypeMinContentLengths=" + this.messageTypeMinContentLengths + ", multiBlockSystemCaching="
+				+ this.contentLengthFunction + ", tokenLengthFunction=" + this.tokenLengthFunction
+				+ ", minCacheablePromptLength=" + this.minCacheablePromptLength + ", messageTypeTtl="
+				+ this.messageTypeTtl + ", messageTypeMinContentLengths=" + this.messageTypeMinContentLengths + ", multiBlockSystemCaching="
 				+ this.multiBlockSystemCaching + '}';
 	}
 
@@ -142,6 +185,16 @@ public class AnthropicCacheOptions {
 
 		public Builder contentLengthFunction(Function<String, Integer> contentLengthFunction) {
 			this.options.setContentLengthFunction(contentLengthFunction);
+			return this;
+		}
+
+		public Builder tokenLengthFunction(Function<String, Integer> tokenLengthFunction) {
+			this.options.setTokenLengthFunction(tokenLengthFunction);
+			return this;
+		}
+
+		public Builder minCacheablePromptLength(Integer minCacheablePromptLength) {
+			this.options.setMinCacheablePromptLength(minCacheablePromptLength);
 			return this;
 		}
 
