@@ -19,6 +19,7 @@ package org.springframework.ai.anthropic;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -107,6 +108,8 @@ public class AnthropicChatModel implements ChatModel {
 	public static final Integer DEFAULT_MAX_TOKENS = 500;
 
 	public static final Double DEFAULT_TEMPERATURE = 0.8;
+
+	private static final int DEFAULT_MIN_CACHEABLE_PROMPT_LENGTH = 1024;
 
 	private static final Logger logger = LoggerFactory.getLogger(AnthropicChatModel.class);
 
@@ -713,10 +716,6 @@ public class AnthropicChatModel implements ChatModel {
 		// candidates
 		Set<Integer> agenticBreakpointIndices = Set.of();
 		if (cacheEligibilityResolver.getStrategy() == AnthropicCacheStrategy.AGENTIC_TOOL_USE) {
-			String requestModel = null;
-			if (prompt.getOptions() instanceof AnthropicChatOptions anthropicChatOptions) {
-				requestModel = anthropicChatOptions.getModel();
-			}
 			agenticBreakpointIndices = findAgenticBreakpointCandidates(allMessages, cacheEligibilityResolver);
 		}
 
@@ -883,8 +882,8 @@ public class AnthropicChatModel implements ChatModel {
 
 	/**
 	 * Find optimal breakpoint candidate for AGENTIC_TOOL_USE strategy. This method finds
-	 * the last TOOL message in the conversation to place a cache breakpoint. All content
-	 * before this breakpoint will be cached by Anthropic.
+	 * the last TOOL message or last ASSISTANT in the conversation to place a cache
+	 * breakpoint. All content before this breakpoint will be cached by Anthropic.
 	 * @param allMessages list of all messages (excluding SYSTEM)
 	 * @param cacheEligibilityResolver the cache eligibility resolver with configuration
 	 * @return set of message indices that should have cache breakpoints applied
@@ -892,7 +891,7 @@ public class AnthropicChatModel implements ChatModel {
 	private Set<Integer> findAgenticBreakpointCandidates(List<Message> allMessages,
 			CacheEligibilityResolver cacheEligibilityResolver) {
 
-		Set<Integer> breakpointIndices = new java.util.HashSet<>();
+		Set<Integer> breakpointIndices = new HashSet<>();
 		int remainingBreakpoints = cacheEligibilityResolver.getRemainingBreakpoints();
 
 		// Reserve at least 1 breakpoint for messages (tools and system may use others)
@@ -978,7 +977,7 @@ public class AnthropicChatModel implements ChatModel {
 		if (override != null && override > 0) {
 			return override;
 		}
-		return 1024;
+		return DEFAULT_MIN_CACHEABLE_PROMPT_LENGTH;
 	}
 
 	private static int estimateDeltaBetweenIndices(List<Message> allMessages, int fromIndexExclusive, int toIndex,
