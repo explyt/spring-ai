@@ -19,6 +19,7 @@ package org.springframework.ai.anthropic;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,6 +44,7 @@ import org.springframework.ai.anthropic.api.AnthropicApi.ContentBlock.Source;
 import org.springframework.ai.anthropic.api.AnthropicApi.ContentBlock.Type;
 import org.springframework.ai.anthropic.api.AnthropicApi.Role;
 import org.springframework.ai.anthropic.api.AnthropicCacheOptions;
+import org.springframework.ai.anthropic.api.AnthropicCacheStrategy;
 import org.springframework.ai.anthropic.api.AnthropicCacheTtl;
 import org.springframework.ai.anthropic.api.CitationDocument;
 import org.springframework.ai.anthropic.api.utils.CacheEligibilityResolver;
@@ -106,6 +108,8 @@ public class AnthropicChatModel implements ChatModel {
 	public static final Integer DEFAULT_MAX_TOKENS = 500;
 
 	public static final Double DEFAULT_TEMPERATURE = 0.8;
+
+	private static final int DEFAULT_MIN_CACHEABLE_PROMPT_LENGTH = 1024;
 
 	private static final Logger logger = LoggerFactory.getLogger(AnthropicChatModel.class);
 
@@ -708,9 +712,17 @@ public class AnthropicChatModel implements ChatModel {
 			.filter(message -> message.getMessageType() != MessageType.SYSTEM)
 			.toList();
 
+		// For AGENTIC_TOOL_USE strategy, use backward-scan to find optimal breakpoint
+		// candidates
+		Set<Integer> agenticBreakpointIndices = Set.of();
+		if (cacheEligibilityResolver.getStrategy() == AnthropicCacheStrategy.AGENTIC_TOOL_USE) {
+			agenticBreakpointIndices = findAgenticBreakpointCandidates(allMessages, cacheEligibilityResolver);
+		}
+
 		// Find the last user message (current question) for CONVERSATION_HISTORY strategy
 		int lastUserIndex = -1;
-		if (cacheEligibilityResolver.isCachingEnabled()) {
+		if (cacheEligibilityResolver.isCachingEnabled()
+				&& cacheEligibilityResolver.getStrategy() != AnthropicCacheStrategy.AGENTIC_TOOL_USE) {
 			for (int i = allMessages.size() - 1; i >= 0; i--) {
 				if (allMessages.get(i).getMessageType() == MessageType.USER) {
 					lastUserIndex = i;
@@ -776,6 +788,7 @@ public class AnthropicChatModel implements ChatModel {
 				result.add(new AnthropicMessage(contentBlocks, Role.valueOf(message.getMessageType().name())));
 			}
 			else if (messageType == MessageType.ASSISTANT) {
+				final boolean shouldApplyAgenticBreakpoint = agenticBreakpointIndices.contains(i);
 				AssistantMessage assistantMessage = (AssistantMessage) message;
 				List<ContentBlock> contentBlocks = new ArrayList<>();
 
@@ -792,24 +805,53 @@ public class AnthropicChatModel implements ChatModel {
 				}
 
 				if (StringUtils.hasText(message.getText())) {
-					contentBlocks.add(cacheAwareContentBlock(new ContentBlock(message.getText()), messageType,
-							cacheEligibilityResolver));
+					if (cacheEligibilityResolver.getStrategy() == AnthropicCacheStrategy.AGENTIC_TOOL_USE) {
+						// In agentic mode we normally avoid caching assistant text, but
+						// if the
+						// breakpoint planner selected this message, apply cache_control
+						// here.
+						ContentBlock textBlock = new ContentBlock(message.getText());
+						contentBlocks.add(shouldApplyAgenticBreakpoint
+								? cacheAwareContentBlock(textBlock, messageType, cacheEligibilityResolver) : textBlock);
+					}
+					else {
+						contentBlocks.add(cacheAwareContentBlock(new ContentBlock(message.getText()), messageType,
+								cacheEligibilityResolver));
+					}
 				}
 				if (!CollectionUtils.isEmpty(assistantMessage.getToolCalls())) {
 					for (AssistantMessage.ToolCall toolCall : assistantMessage.getToolCalls()) {
 						ContentBlock contentBlock = new ContentBlock(Type.TOOL_USE, toolCall.id(), toolCall.name(),
 								ModelOptionsUtils.jsonToMap(toolCall.arguments()));
-						contentBlocks.add(cacheAwareContentBlock(contentBlock, messageType, cacheEligibilityResolver));
+						if (cacheEligibilityResolver.getStrategy() == AnthropicCacheStrategy.AGENTIC_TOOL_USE) {
+							contentBlocks.add(contentBlock);
+						}
+						else {
+							contentBlocks
+								.add(cacheAwareContentBlock(contentBlock, messageType, cacheEligibilityResolver));
+						}
 					}
 				}
 				result.add(new AnthropicMessage(contentBlocks, Role.ASSISTANT));
 			}
 			else if (messageType == MessageType.TOOL) {
+				final boolean shouldApplyAgenticBreakpoint = agenticBreakpointIndices.contains(i);
 				List<ContentBlock> toolResponses = ((ToolResponseMessage) message).getResponses()
 					.stream()
 					.map(toolResponse -> new ContentBlock(Type.TOOL_RESULT, toolResponse.id(),
 							toolResponse.responseData()))
-					.map(contentBlock -> cacheAwareContentBlock(contentBlock, messageType, cacheEligibilityResolver))
+					.map(contentBlock -> {
+						// For AGENTIC_TOOL_USE, only apply cache to selected breakpoint
+						// indices
+						if (shouldApplyAgenticBreakpoint) {
+							return cacheAwareContentBlock(contentBlock, messageType, cacheEligibilityResolver);
+						}
+						// For other strategies, use standard caching logic
+						else if (cacheEligibilityResolver.getStrategy() != AnthropicCacheStrategy.AGENTIC_TOOL_USE) {
+							return cacheAwareContentBlock(contentBlock, messageType, cacheEligibilityResolver);
+						}
+						return contentBlock;
+					})
 					.toList();
 				result.add(new AnthropicMessage(toolResponses, Role.USER));
 			}
@@ -836,6 +878,122 @@ public class AnthropicChatModel implements ChatModel {
 			}
 		}
 		return sb.toString();
+	}
+
+	/**
+	 * Find optimal breakpoint candidate for AGENTIC_TOOL_USE strategy. This method finds
+	 * the last TOOL message or last ASSISTANT in the conversation to place a cache
+	 * breakpoint. All content before this breakpoint will be cached by Anthropic.
+	 * @param allMessages list of all messages (excluding SYSTEM)
+	 * @param cacheEligibilityResolver the cache eligibility resolver with configuration
+	 * @return set of message indices that should have cache breakpoints applied
+	 */
+	private Set<Integer> findAgenticBreakpointCandidates(List<Message> allMessages,
+			CacheEligibilityResolver cacheEligibilityResolver) {
+
+		Set<Integer> breakpointIndices = new HashSet<>();
+		int remainingBreakpoints = cacheEligibilityResolver.getRemainingBreakpoints();
+
+		// Reserve at least 1 breakpoint for messages (tools and system may use others)
+		if (remainingBreakpoints < 1) {
+			logger.debug("AGENTIC_TOOL_USE: No remaining breakpoints available for messages");
+			return breakpointIndices;
+		}
+
+		int lastToolIndex = findLastToolIndex(allMessages);
+
+		int lastStableAssistantIndex = findLastStableAssistantWithoutToolCallsIndex(allMessages);
+
+		int minCacheableDelta = resolveMinCacheablePromptLength(cacheEligibilityResolver);
+
+		// If there are no TOOL messages at all, fall back to a "dialog" mode:
+		// prefer caching a stable, large ASSISTANT block (no toolCalls).
+		int baselineIndex = lastToolIndex;
+		int selectedIndex = lastToolIndex;
+		String selectedReason = "fallback to last TOOL";
+		if (lastToolIndex < 0) {
+			baselineIndex = -1;
+			selectedIndex = -1;
+			selectedReason = "no TOOL messages";
+		}
+
+		// Prefer the last stable ASSISTANT (no toolCalls) if the delta since baseline is
+		// large enough to justify a cache write and meet Anthropic min cacheable length.
+		if (lastStableAssistantIndex > baselineIndex) {
+			int delta = estimateDeltaBetweenIndices(allMessages, baselineIndex, lastStableAssistantIndex,
+					cacheEligibilityResolver);
+			if (delta >= minCacheableDelta) {
+				selectedIndex = lastStableAssistantIndex;
+				selectedReason = (lastToolIndex < 0) ? "dialog mode: ASSISTANT delta >= minCacheableDelta"
+						: "delta since last TOOL >= minCacheableDelta on stable ASSISTANT";
+			}
+			logger.debug(
+					"AGENTIC_TOOL_USE: candidate ASSISTANT index={}, baselineIndex={}, delta={}, minCacheableDelta={} -> {}",
+					lastStableAssistantIndex, baselineIndex, delta, minCacheableDelta, selectedReason);
+		}
+
+		// Nothing eligible.
+		if (selectedIndex < 0) {
+			logger.debug("AGENTIC_TOOL_USE: No suitable message found for cache breakpoint");
+			return breakpointIndices;
+		}
+
+		breakpointIndices.add(selectedIndex);
+		logger.debug("AGENTIC_TOOL_USE: Selected message at index {} for cache breakpoint ({})", selectedIndex,
+				selectedReason);
+
+		return breakpointIndices;
+	}
+
+	private static int findLastToolIndex(List<Message> allMessages) {
+		for (int i = allMessages.size() - 1; i >= 0; i--) {
+			if (allMessages.get(i).getMessageType() == MessageType.TOOL) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	private static int findLastStableAssistantWithoutToolCallsIndex(List<Message> allMessages) {
+		for (int i = allMessages.size() - 1; i >= 0; i--) {
+			Message m = allMessages.get(i);
+			if (m.getMessageType() != MessageType.ASSISTANT) {
+				continue;
+			}
+			AssistantMessage assistant = (AssistantMessage) m;
+			if (!CollectionUtils.isEmpty(assistant.getToolCalls())) {
+				continue;
+			}
+			if (!StringUtils.hasText(assistant.getText())) {
+				continue;
+			}
+			return i;
+		}
+		return -1;
+	}
+
+	private static int resolveMinCacheablePromptLength(CacheEligibilityResolver cacheEligibilityResolver) {
+		Integer override = cacheEligibilityResolver.getMinCacheablePromptLength();
+		if (override != null && override > 0) {
+			return override;
+		}
+		return DEFAULT_MIN_CACHEABLE_PROMPT_LENGTH;
+	}
+
+	private static int estimateDeltaBetweenIndices(List<Message> allMessages, int fromIndexExclusive, int toIndex,
+			CacheEligibilityResolver cacheEligibilityResolver) {
+		if (toIndex <= fromIndexExclusive) {
+			return 0;
+		}
+		StringBuilder sb = new StringBuilder();
+		for (int i = fromIndexExclusive + 1; i <= toIndex; i++) {
+			Message m = allMessages.get(i);
+			String t = m.getText();
+			if (StringUtils.hasText(t)) {
+				sb.append(t);
+			}
+		}
+		return cacheEligibilityResolver.getTokenLengthFunction().apply(sb.toString());
 	}
 
 	/**
