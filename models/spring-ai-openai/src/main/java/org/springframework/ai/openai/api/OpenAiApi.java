@@ -1854,8 +1854,15 @@ public class OpenAiApi {
 		@JsonProperty("prompt_tokens") Integer promptTokens,
 		@JsonProperty("total_tokens") Integer totalTokens,
 		@JsonProperty("prompt_tokens_details") PromptTokensDetails promptTokensDetails,
-		@JsonProperty("completion_tokens_details") CompletionTokenDetails completionTokenDetails
-		) { // @formatter:on
+		@JsonProperty("completion_tokens_details") CompletionTokenDetails completionTokenDetails,
+		@JsonProperty("compute_millis") Long computeMillis,
+		@JsonProperty("price_for_enterprise") Double priceForEnterprise
+	) { // @formatter:on
+
+		public Usage(Integer completionTokens, Integer promptTokens, Integer totalTokens,
+				PromptTokensDetails promptTokensDetails, CompletionTokenDetails completionTokenDetails) {
+			this(completionTokens, promptTokens, totalTokens, promptTokensDetails, completionTokenDetails, null, null);
+		}
 
 		public Usage(Integer completionTokens, Integer promptTokens, Integer totalTokens) {
 			this(completionTokens, promptTokens, totalTokens, null, null);
