@@ -1846,6 +1846,11 @@ public class OpenAiApi {
 	 * completion).
 	 * @param promptTokensDetails Breakdown of tokens used in the prompt.
 	 * @param completionTokenDetails Breakdown of tokens used in a completion.
+	 * @param computeMillis Optional time in milliseconds spent computing the response.
+	 * @param waitMillis Optional time in milliseconds spent waiting before computation.
+	 * @param price Optional price of the request as a string.
+	 * @param priceWithDiscount Optional price of the request with discount applied, as a
+	 * string.
 	 */
 	@JsonInclude(Include.NON_NULL)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1856,16 +1861,19 @@ public class OpenAiApi {
 		@JsonProperty("prompt_tokens_details") PromptTokensDetails promptTokensDetails,
 		@JsonProperty("completion_tokens_details") CompletionTokenDetails completionTokenDetails,
 		@JsonProperty("compute_millis") Long computeMillis,
-		@JsonProperty("price_for_enterprise") Double priceForEnterprise
+		@JsonProperty("wait_millis") Long waitMillis,
+		@JsonProperty("price") String price,
+		@JsonProperty("price_with_discount") String priceWithDiscount
 	) { // @formatter:on
+
+		public Usage(Integer completionTokens, Integer promptTokens, Integer totalTokens) {
+			this(completionTokens, promptTokens, totalTokens, null, null, null, null, null, null);
+		}
 
 		public Usage(Integer completionTokens, Integer promptTokens, Integer totalTokens,
 				PromptTokensDetails promptTokensDetails, CompletionTokenDetails completionTokenDetails) {
-			this(completionTokens, promptTokens, totalTokens, promptTokensDetails, completionTokenDetails, null, null);
-		}
-
-		public Usage(Integer completionTokens, Integer promptTokens, Integer totalTokens) {
-			this(completionTokens, promptTokens, totalTokens, null, null);
+			this(completionTokens, promptTokens, totalTokens, promptTokensDetails, completionTokenDetails, null, null,
+					null, null);
 		}
 
 		/**
