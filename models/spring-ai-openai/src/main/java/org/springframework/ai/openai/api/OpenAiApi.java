@@ -26,6 +26,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -1894,6 +1895,38 @@ public class OpenAiApi {
 			@JsonProperty("system_fingerprint") String systemFingerprint,
 			@JsonProperty("object") String object,
 			@JsonProperty("usage") Usage usage) { // @formatter:on
+
+		/**
+		 * Jackson factory that also accepts {@code compute_millis}, {@code wait_millis},
+		 * {@code price} and {@code price_with_discount} when they are misplaced at the
+		 * root of the streaming JSON (outside the {@code usage} object) and folds them
+		 * back into the returned {@link Usage}.
+		 * <p>
+		 * Needed for OhMyCode
+		 */
+		@JsonCreator(mode = JsonCreator.Mode.PROPERTIES)
+		public static ChatCompletionChunk fromJson(// @formatter:off
+				@JsonProperty("id") String id,
+				@JsonProperty("choices") List<ChunkChoice> choices,
+				@JsonProperty("created") Long created,
+				@JsonProperty("model") String model,
+				@JsonProperty("service_tier") String serviceTier,
+				@JsonProperty("system_fingerprint") String systemFingerprint,
+				@JsonProperty("object") String object,
+				@JsonProperty("usage") Usage usage,
+				@JsonProperty("compute_millis") Long computeMillis,
+				@JsonProperty("wait_millis") Long waitMillis,
+				@JsonProperty("price") String price,
+				@JsonProperty("price_with_discount") String priceWithDiscount) { // @formatter:on
+			boolean hasMisplaced = computeMillis != null || waitMillis != null || price != null
+					|| priceWithDiscount != null;
+			if (hasMisplaced && usage != null) {
+				usage = new Usage(usage.completionTokens(), usage.promptTokens(), usage.totalTokens(),
+						usage.promptTokensDetails(), usage.completionTokenDetails(), computeMillis, waitMillis, price,
+						priceWithDiscount);
+			}
+			return new ChatCompletionChunk(id, choices, created, model, serviceTier, systemFingerprint, object, usage);
+		}
 
 		/**
 		 * Chat completion choice.
