@@ -58,7 +58,8 @@
 	</licenses>
 
 	<properties>
-<flatten-maven-plugin.version>1.5.0</flatten-maven-plugin.version>
+		<revision>0.0.1-SNAPSHOT-local</revision>
+		<flatten-maven-plugin.version>1.5.0</flatten-maven-plugin.version>
 		<maven-deploy-plugin.version>3.1.1</maven-deploy-plugin.version>
 	</properties>
 
