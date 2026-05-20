@@ -272,7 +272,7 @@
 	</licenses>
 
 	<properties>
-		<revision>0.0.1-SNAPSHOT-local</revision>
+<revision>0.0.1-SNAPSHOT-local</revision>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 		<java.version>17</java.version>
@@ -514,7 +514,7 @@
 							<goal>flatten</goal>
 						</goals>
 						<configuration>
-							<updatePomFile>true</updatePomFile>
+<updatePomFile>false</updatePomFile>
 							<flattenMode>ossrh</flattenMode>
 							<pomElements>
 								<distributionManagement>remove</distributionManagement>

@@ -170,8 +170,8 @@ public class AnthropicCacheOptions {
 		return "AnthropicCacheOptions{" + "strategy=" + this.strategy + ", contentLengthFunction="
 				+ this.contentLengthFunction + ", tokenLengthFunction=" + this.tokenLengthFunction
 				+ ", minCacheablePromptLength=" + this.minCacheablePromptLength + ", messageTypeTtl="
-				+ this.messageTypeTtl + ", messageTypeMinContentLengths=" + this.messageTypeMinContentLengths + ", multiBlockSystemCaching="
-				+ this.multiBlockSystemCaching + '}';
+				+ this.messageTypeTtl + ", messageTypeMinContentLengths=" + this.messageTypeMinContentLengths
+				+ ", multiBlockSystemCaching=" + this.multiBlockSystemCaching + '}';
 	}
 
 	public static final class Builder {

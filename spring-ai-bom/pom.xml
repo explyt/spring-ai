@@ -58,7 +58,7 @@
 	</licenses>
 
 	<properties>
-		<flatten-maven-plugin.version>1.5.0</flatten-maven-plugin.version>
+<flatten-maven-plugin.version>1.5.0</flatten-maven-plugin.version>
 		<maven-deploy-plugin.version>3.1.1</maven-deploy-plugin.version>
 	</properties>
 
@@ -1287,7 +1287,7 @@
 							<goal>flatten</goal>
 						</goals>
 						<configuration>
-							<updatePomFile>true</updatePomFile>
+							<updatePomFile>false</updatePomFile>
 							<flattenMode>ossrh</flattenMode>
 							<pomElements>
 								<distributionManagement>keep</distributionManagement>

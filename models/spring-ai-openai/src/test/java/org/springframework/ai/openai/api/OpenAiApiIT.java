@@ -187,7 +187,8 @@ class OpenAiApiIT {
 
 		ChatCompletionRequest request = new ChatCompletionRequest(List.of(chatCompletionMessage), // messages
 				modelName.getValue(), null, null, null, null, null, null, null, null, null, null, null, null, null,
-				null, null, null, false, null, 1.0, null, null, null, null, null, null, null, "low", UUID.randomUUID().toString(), null, null);
+				null, null, null, false, null, 1.0, null, null, null, null, null, null, null, "low",
+				UUID.randomUUID().toString(), null, null);
 
 		ResponseEntity<ChatCompletion> response = this.openAiApi.chatCompletionEntity(request);
 
