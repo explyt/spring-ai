@@ -1288,7 +1288,7 @@
 							<goal>flatten</goal>
 						</goals>
 						<configuration>
-							<updatePomFile>false</updatePomFile>
+							<updatePomFile>true</updatePomFile>
 							<flattenMode>ossrh</flattenMode>
 							<pomElements>
 								<distributionManagement>keep</distributionManagement>
