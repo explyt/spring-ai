@@ -20,7 +20,7 @@
     xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>org.springframework.ai</groupId>
+        <groupId>ai.explyt.spring-ai</groupId>
         <artifactId>spring-ai-parent</artifactId>
         <version>${revision}</version>
         <relativePath>../../pom.xml</relativePath>
@@ -45,19 +45,19 @@
         </dependency>
 
         <dependency>
-            <groupId>org.springframework.ai</groupId>
+            <groupId>ai.explyt.spring-ai</groupId>
             <artifactId>spring-ai-autoconfigure-mcp-client-webflux</artifactId>
             <version>${project.parent.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.springframework.ai</groupId>
+            <groupId>ai.explyt.spring-ai</groupId>
             <artifactId>spring-ai-mcp</artifactId>
             <version>${project.parent.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.springframework.ai</groupId>
+            <groupId>ai.explyt.spring-ai</groupId>
             <artifactId>spring-ai-mcp-annotations</artifactId>
             <version>${project.parent.version}</version>
         </dependency>
