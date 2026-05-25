@@ -4,7 +4,7 @@
 		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<parent>
-		<groupId>org.springframework.ai</groupId>
+		<groupId>ai.explyt.spring-ai</groupId>
 		<artifactId>spring-ai-parent</artifactId>
 		<version>${revision}</version>
 		<relativePath>../../../pom.xml</relativePath>
@@ -27,14 +27,14 @@
 		<!-- Spring AI dependencies -->
 
 		<dependency>
-			<groupId>org.springframework.ai</groupId>
+			<groupId>ai.explyt.spring-ai</groupId>
 			<artifactId>spring-ai-bedrock</artifactId>
 			<version>${project.parent.version}</version>
 			<optional>true</optional>
 		</dependency>
 
 		<dependency>
-			<groupId>org.springframework.ai</groupId>
+			<groupId>ai.explyt.spring-ai</groupId>
 			<artifactId>spring-ai-bedrock-converse</artifactId>
 			<version>${project.parent.version}</version>
 			<optional>true</optional>
@@ -43,31 +43,31 @@
 		<!-- Spring AI auto configurations -->
 
 		<dependency>
-			<groupId>org.springframework.ai</groupId>
+			<groupId>ai.explyt.spring-ai</groupId>
 			<artifactId>spring-ai-autoconfigure-model-tool</artifactId>
 			<version>${project.parent.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.springframework.ai</groupId>
+			<groupId>ai.explyt.spring-ai</groupId>
 			<artifactId>spring-ai-autoconfigure-retry</artifactId>
 			<version>${project.parent.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.springframework.ai</groupId>
+			<groupId>ai.explyt.spring-ai</groupId>
 			<artifactId>spring-ai-autoconfigure-model-chat-observation</artifactId>
 			<version>${project.parent.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.springframework.ai</groupId>
+			<groupId>ai.explyt.spring-ai</groupId>
 			<artifactId>spring-ai-autoconfigure-model-embedding-observation</artifactId>
 			<version>${project.parent.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.springframework.ai</groupId>
+			<groupId>ai.explyt.spring-ai</groupId>
 			<artifactId>spring-ai-autoconfigure-model-image-observation</artifactId>
 			<version>${project.parent.version}</version>
 		</dependency>
@@ -99,7 +99,7 @@
 
 		<!-- Test dependencies -->
 		<dependency>
-			<groupId>org.springframework.ai</groupId>
+			<groupId>ai.explyt.spring-ai</groupId>
 			<artifactId>spring-ai-test</artifactId>
 			<version>${project.parent.version}</version>
 			<scope>test</scope>
