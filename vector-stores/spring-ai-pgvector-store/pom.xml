@@ -19,7 +19,7 @@
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<parent>
-		<groupId>org.springframework.ai</groupId>
+		<groupId>ai.explyt.spring-ai</groupId>
 		<artifactId>spring-ai-parent</artifactId>
 		<version>${revision}</version>
 		<relativePath>../../pom.xml</relativePath>
@@ -43,7 +43,7 @@
 
 	<dependencies>
 		<dependency>
-			<groupId>org.springframework.ai</groupId>
+			<groupId>ai.explyt.spring-ai</groupId>
 			<artifactId>spring-ai-vector-store</artifactId>
 			<version>${project.parent.version}</version>
 		</dependency>
@@ -71,14 +71,14 @@
 
 		<!-- TESTING -->
 		<dependency>
-			<groupId>org.springframework.ai</groupId>
+			<groupId>ai.explyt.spring-ai</groupId>
 			<artifactId>spring-ai-openai</artifactId>
 			<version>${project.parent.version}</version>
 			<scope>test</scope>
 		</dependency>
 
 		<dependency>
-			<groupId>org.springframework.ai</groupId>
+			<groupId>ai.explyt.spring-ai</groupId>
 			<artifactId>spring-ai-vertex-ai-embedding</artifactId>
 			<version>${project.parent.version}</version>
 			<scope>test</scope>
@@ -86,7 +86,7 @@
 
 
 		<dependency>
-			<groupId>org.springframework.ai</groupId>
+			<groupId>ai.explyt.spring-ai</groupId>
 			<artifactId>spring-ai-test</artifactId>
 			<version>${project.parent.version}</version>
 			<scope>test</scope>
@@ -121,7 +121,7 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-			<groupId>org.springframework.ai</groupId>
+			<groupId>ai.explyt.spring-ai</groupId>
 			<artifactId>spring-ai-advisors-vector-store</artifactId>
 			<version>${project.version}</version>
 			<scope>test</scope>

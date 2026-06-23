@@ -4,7 +4,7 @@
 		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 	<parent>
-		<groupId>org.springframework.ai</groupId>
+		<groupId>ai.explyt.spring-ai</groupId>
 		<artifactId>spring-ai-parent</artifactId>
 		<version>${revision}</version>
 		<relativePath>../../pom.xml</relativePath>
@@ -30,13 +30,13 @@
 
 		<!-- production dependencies -->
 		<dependency>
-			<groupId>org.springframework.ai</groupId>
+			<groupId>ai.explyt.spring-ai</groupId>
 			<artifactId>spring-ai-model</artifactId>
 			<version>${project.parent.version}</version>
 		</dependency>
 
 		<dependency>
-			<groupId>org.springframework.ai</groupId>
+			<groupId>ai.explyt.spring-ai</groupId>
 			<artifactId>spring-ai-retry</artifactId>
 			<version>${project.parent.version}</version>
 		</dependency>
@@ -63,7 +63,7 @@
 
 		<!-- test dependencies -->
 		<dependency>
-			<groupId>org.springframework.ai</groupId>
+			<groupId>ai.explyt.spring-ai</groupId>
 			<artifactId>spring-ai-test</artifactId>
 			<version>${project.version}</version>
 			<scope>test</scope>
