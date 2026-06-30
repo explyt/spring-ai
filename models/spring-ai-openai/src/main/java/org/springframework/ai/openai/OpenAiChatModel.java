@@ -375,7 +375,13 @@ public class OpenAiChatModel implements ChatModel {
 				.buffer(2, 1)
 				.map(bufferList -> {
 					ChatResponse firstResponse = bufferList.get(0);
-					if (request.streamOptions() != null && request.streamOptions().includeUsage()) {
+					// Raw passthrough forces stream_options.include_usage=true onto the
+					// wire body (applyOverrides), but the typed request has no
+					// streamOptions. Gate on rawBody too, else the final usage chunk is
+					// dropped and raw streams report empty token totals.
+					boolean includeUsage = rawBody != null
+							|| (request.streamOptions() != null && request.streamOptions().includeUsage());
+					if (includeUsage) {
 						if (bufferList.size() == 2) {
 							ChatResponse secondResponse = bufferList.get(1);
 							if (secondResponse != null && secondResponse.getMetadata() != null) {

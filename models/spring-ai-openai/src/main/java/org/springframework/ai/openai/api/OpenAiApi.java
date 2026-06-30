@@ -352,9 +352,10 @@ public class OpenAiApi {
 			.bodyValue(rawBody)
 			.retrieve()
 			.bodyToFlux(String.class)
-			// cancels the flux stream after the "[DONE]" is received.
-			.takeUntil(SSE_DONE_PREDICATE)
-			// filters out the "[DONE]" message.
+			// Do NOT takeUntil("[DONE]"): cancelling on the sentinel closes the
+			// connection before the body is drained, defeating the connection reuse
+			// the typed chatCompletionStream above relies on, and making the gateway
+			// drop TLS handshakes under load. Just filter [DONE] and drain to EOF.
 			.filter(SSE_DONE_PREDICATE.negate())
 			.map(parser)
 			// Detect is the chunk is part of a streaming function call.
