@@ -20,8 +20,10 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
@@ -180,7 +182,21 @@ public class OpenAiChatModel implements ChatModel {
 		return this.internalCall(requestPrompt, null);
 	}
 
+	/**
+	 * Raw passthrough variant of {@link #call(Prompt)}: forwards {@code rawBody} verbatim
+	 * to the provider (with model/stream/key overrides applied) instead of reconstructing
+	 * the request body. The response is parsed exactly as in the normal path.
+	 */
+	public ChatResponse callRaw(Prompt prompt, String rawBody) {
+		Prompt requestPrompt = buildRequestPrompt(prompt);
+		return this.internalCall(requestPrompt, null, rawBody);
+	}
+
 	public ChatResponse internalCall(Prompt prompt, ChatResponse previousChatResponse) {
+		return this.internalCall(prompt, previousChatResponse, null);
+	}
+
+	public ChatResponse internalCall(Prompt prompt, ChatResponse previousChatResponse, String rawBody) {
 
 		ChatCompletionRequest request = createRequest(prompt, false);
 
@@ -194,8 +210,10 @@ public class OpenAiChatModel implements ChatModel {
 					this.observationRegistry)
 			.observe(() -> {
 
-				ResponseEntity<ChatCompletion> completionEntity = this.retryTemplate
-					.execute(ctx -> this.openAiApi.chatCompletionEntity(request, getAdditionalHttpHeaders(prompt)));
+				ResponseEntity<ChatCompletion> completionEntity = this.retryTemplate.execute(ctx -> rawBody != null
+						? this.openAiApi.chatCompletionEntityRaw(applyOverrides(rawBody, request),
+								getAdditionalHttpHeaders(prompt))
+						: this.openAiApi.chatCompletionEntity(request, getAdditionalHttpHeaders(prompt)));
 
 				var chatCompletion = completionEntity.getBody();
 
@@ -266,7 +284,22 @@ public class OpenAiChatModel implements ChatModel {
 		return internalStream(requestPrompt, null);
 	}
 
+	/**
+	 * Raw passthrough variant of {@link #stream(Prompt)}: forwards {@code rawBody}
+	 * verbatim to the provider (with model/stream/key overrides applied) instead of
+	 * reconstructing the request body. The response stream is parsed exactly as in the
+	 * normal path.
+	 */
+	public Flux<ChatResponse> streamRaw(Prompt prompt, String rawBody) {
+		Prompt requestPrompt = buildRequestPrompt(prompt);
+		return internalStream(requestPrompt, null, rawBody);
+	}
+
 	public Flux<ChatResponse> internalStream(Prompt prompt, ChatResponse previousChatResponse) {
+		return internalStream(prompt, previousChatResponse, null);
+	}
+
+	public Flux<ChatResponse> internalStream(Prompt prompt, ChatResponse previousChatResponse, String rawBody) {
 		return Flux.deferContextual(contextView -> {
 			ChatCompletionRequest request = createRequest(prompt, true);
 
@@ -281,8 +314,10 @@ public class OpenAiChatModel implements ChatModel {
 				throw new IllegalArgumentException("Audio parameters are not supported for streaming requests.");
 			}
 
-			Flux<OpenAiApi.ChatCompletionChunk> completionChunks = this.openAiApi.chatCompletionStream(request,
-					getAdditionalHttpHeaders(prompt));
+			Flux<OpenAiApi.ChatCompletionChunk> completionChunks = rawBody != null
+					? this.openAiApi.chatCompletionStreamRaw(applyOverrides(rawBody, request),
+							getAdditionalHttpHeaders(prompt))
+					: this.openAiApi.chatCompletionStream(request, getAdditionalHttpHeaders(prompt));
 
 			// For chunked responses, only the first chunk contains the choice role.
 			// The rest of the chunks with same ID share the same role.
@@ -340,7 +375,13 @@ public class OpenAiChatModel implements ChatModel {
 				.buffer(2, 1)
 				.map(bufferList -> {
 					ChatResponse firstResponse = bufferList.get(0);
-					if (request.streamOptions() != null && request.streamOptions().includeUsage()) {
+					// Raw passthrough forces stream_options.include_usage=true onto the
+					// wire body (applyOverrides), but the typed request has no
+					// streamOptions. Gate on rawBody too, else the final usage chunk is
+					// dropped and raw streams report empty token totals.
+					boolean includeUsage = rawBody != null
+							|| (request.streamOptions() != null && request.streamOptions().includeUsage());
+					if (includeUsage) {
 						if (bufferList.size() == 2) {
 							ChatResponse secondResponse = bufferList.get(1);
 							if (secondResponse != null && secondResponse.getMetadata() != null) {
@@ -408,6 +449,37 @@ public class OpenAiChatModel implements ChatModel {
 		}
 		return CollectionUtils.toMultiValueMap(
 				headers.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> List.of(e.getValue()))));
+	}
+
+	/**
+	 * Applies the minimal mandatory overrides to a raw passthrough request body before
+	 * sending it verbatim: the resolved provider {@code model}, the actual transport
+	 * {@code stream} flag, and (for streaming) {@code stream_options.include_usage=true}
+	 * so the final usage chunk is emitted for billing. Everything else is forwarded
+	 * as-is.
+	 */
+	private String applyOverrides(String rawBody, ChatCompletionRequest request) {
+		try {
+			JsonNode tree = ModelOptionsUtils.OBJECT_MAPPER.readTree(rawBody);
+			if (!(tree instanceof ObjectNode root)) {
+				throw new IllegalArgumentException("Raw passthrough request body must be a JSON object");
+			}
+			if (request.model() != null) {
+				root.put("model", request.model());
+			}
+			boolean stream = Boolean.TRUE.equals(request.stream());
+			root.put("stream", stream);
+			if (stream) {
+				ObjectNode streamOptions = root.get("stream_options") instanceof ObjectNode existing ? existing
+						: ModelOptionsUtils.OBJECT_MAPPER.createObjectNode();
+				streamOptions.put("include_usage", true);
+				root.set("stream_options", streamOptions);
+			}
+			return ModelOptionsUtils.OBJECT_MAPPER.writeValueAsString(root);
+		}
+		catch (JsonProcessingException e) {
+			throw new IllegalArgumentException("Failed to apply overrides to raw passthrough request body", e);
+		}
 	}
 
 	private Generation buildGeneration(Choice choice, Map<String, Object> metadata, ChatCompletionRequest request) {

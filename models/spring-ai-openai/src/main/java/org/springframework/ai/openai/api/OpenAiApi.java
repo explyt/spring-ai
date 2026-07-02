@@ -225,6 +225,36 @@ public class OpenAiApi {
 	}
 
 	/**
+	 * Sends a raw, pre-serialized chat completion request body verbatim to the
+	 * completions endpoint. Used by the raw passthrough path to forward the original
+	 * client request without reconstructing it. Forwarded headers are added only when
+	 * absent so that gateway-set headers (and the injected API key) win.
+	 * @param rawBody the raw JSON request body, sent as-is.
+	 * @param additionalHttpHeader Optional, additional HTTP headers to be added to the
+	 * request only when not already present.
+	 * @return Entity response with {@link ChatCompletion} as a body and HTTP status code
+	 * and headers.
+	 */
+	public ResponseEntity<ChatCompletion> chatCompletionEntityRaw(String rawBody,
+			MultiValueMap<String, String> additionalHttpHeader) {
+
+		Assert.notNull(rawBody, REQUEST_BODY_NULL_MESSAGE);
+		Assert.notNull(additionalHttpHeader, ADDITIONAL_HEADERS_NULL_MESSAGE);
+
+		// @formatter:off
+		return this.restClient.post()
+			.uri(this.completionsPath)
+			.headers(headers -> {
+				addHeadersIfMissing(headers, additionalHttpHeader);
+				addDefaultHeadersIfMissing(headers);
+			})
+			.body(rawBody)
+			.retrieve()
+			.toEntity(ChatCompletion.class);
+		// @formatter:on
+	}
+
+	/**
 	 * Creates a streaming chat response for the given chat conversation.
 	 * @param chatRequest The chat completion request. Must have the stream property set
 	 * to true.
@@ -261,6 +291,71 @@ public class OpenAiApi {
 			.retrieve()
 			.bodyToFlux(String.class)
 			// filters out the "[DONE]" message.
+			.filter(SSE_DONE_PREDICATE.negate())
+			.map(parser)
+			// Detect is the chunk is part of a streaming function call.
+			.map(chunk -> {
+				if (this.chunkMerger.isStreamingToolFunctionCall(chunk)) {
+					isInsideTool.set(true);
+				}
+				return chunk;
+			})
+			// Group all chunks belonging to the same function call.
+			// Flux<ChatCompletionChunk> -> Flux<Flux<ChatCompletionChunk>>
+			.windowUntil(chunk -> {
+				if (isInsideTool.get() && this.chunkMerger.isStreamingToolFunctionCallFinish(chunk)) {
+					isInsideTool.set(false);
+					return true;
+				}
+				return !isInsideTool.get();
+			})
+			// Merging the window chunks into a single chunk.
+			// Reduce the inner Flux<ChatCompletionChunk> window into a single
+			// Mono<ChatCompletionChunk>,
+			// Flux<Flux<ChatCompletionChunk>> -> Flux<Mono<ChatCompletionChunk>>
+			.concatMapIterable(window -> {
+				Mono<ChatCompletionChunk> monoChunk = window.reduce(
+						new ChatCompletionChunk(null, null, null, null, null, null, null, null),
+						(previous, current) -> this.chunkMerger.merge(previous, current));
+				return List.of(monoChunk);
+			})
+			// Flux<Mono<ChatCompletionChunk>> -> Flux<ChatCompletionChunk>
+			.flatMap(mono -> mono);
+	}
+
+	/**
+	 * Creates a streaming chat response from a raw, pre-serialized request body sent
+	 * verbatim to the completions endpoint. Mirrors {@link #chatCompletionStream} but
+	 * forwards the original client body without reconstructing it. Forwarded headers are
+	 * added only when absent so that gateway-set headers (and the injected API key) win.
+	 * @param rawBody the raw JSON request body, sent as-is. Must have the stream property
+	 * set to true.
+	 * @param additionalHttpHeader Optional, additional HTTP headers to be added to the
+	 * request only when not already present.
+	 * @return Returns a {@link Flux} stream from chat completion chunks.
+	 */
+	public Flux<ChatCompletionChunk> chatCompletionStreamRaw(String rawBody,
+			MultiValueMap<String, String> additionalHttpHeader) {
+
+		Assert.notNull(rawBody, REQUEST_BODY_NULL_MESSAGE);
+		Assert.notNull(additionalHttpHeader, ADDITIONAL_HEADERS_NULL_MESSAGE);
+
+		AtomicBoolean isInsideTool = new AtomicBoolean(false);
+
+		// @formatter:off
+		return this.webClient.post()
+			.uri(this.completionsPath)
+			.headers(headers -> {
+				addHeadersIfMissing(headers, additionalHttpHeader);
+				addDefaultHeadersIfMissing(headers);
+			}) // @formatter:on
+			.bodyValue(rawBody)
+			.retrieve()
+			.bodyToFlux(String.class)
+			// Do NOT takeUntil("[DONE]"): cancelling on the sentinel closes the
+			// connection before the body is drained, defeating the connection reuse
+			// the typed chatCompletionStream above relies on, and making the gateway
+			// drop TLS handshakes under load. Just filter [DONE] and drain to EOF.
 			.filter(SSE_DONE_PREDICATE.negate())
 			.map(parser)
 			// Detect is the chunk is part of a streaming function call.
@@ -340,6 +435,18 @@ public class OpenAiApi {
 		if (!headers.containsKey(HttpHeaders.AUTHORIZATION) && !(this.apiKey instanceof NoopApiKey)) {
 			headers.setBearerAuth(this.apiKey.getValue());
 		}
+	}
+
+	/**
+	 * Adds the given headers only when the key is not already present, so that headers
+	 * set earlier (defaults, gateway-managed) are never overwritten by forwarded ones.
+	 */
+	private void addHeadersIfMissing(HttpHeaders headers, MultiValueMap<String, String> additionalHttpHeader) {
+		additionalHttpHeader.forEach((key, values) -> {
+			if (!headers.containsKey(key)) {
+				headers.addAll(key, values);
+			}
+		});
 	}
 
 	// Package-private getters for mutate/copy
