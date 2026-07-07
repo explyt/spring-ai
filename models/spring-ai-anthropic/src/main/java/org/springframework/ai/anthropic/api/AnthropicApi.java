@@ -186,6 +186,38 @@ public final class AnthropicApi {
 	}
 
 	/**
+	 * Sends a raw, pre-serialized message request body verbatim to the completions
+	 * endpoint. Used by the raw passthrough path to forward the original client request
+	 * without reconstructing it. Forwarded headers are added as request-level headers, so
+	 * they shadow the client's default headers (e.g. anthropic-version, anthropic-beta)
+	 * and suppress the lazily injected API key — stripping sensitive headers such as
+	 * x-api-key is the calling gateway's responsibility.
+	 * @param rawBody the raw JSON request body, sent as-is.
+	 * @param additionalHttpHeader Optional, additional HTTP headers to be added to the
+	 * request only when not already present.
+	 * @return Entity response with {@link ChatCompletionResponse} as a body and HTTP
+	 * status code and headers.
+	 */
+	public ResponseEntity<ChatCompletionResponse> chatCompletionEntityRaw(String rawBody,
+			MultiValueMap<String, String> additionalHttpHeader) {
+
+		Assert.notNull(rawBody, "The request body can not be null.");
+		Assert.notNull(additionalHttpHeader, "The additional HTTP headers can not be null.");
+
+		// @formatter:off
+		return this.restClient.post()
+			.uri(this.completionsPath)
+			.headers(headers -> {
+				addHeadersIfMissing(headers, additionalHttpHeader);
+				addDefaultHeadersIfMissing(headers);
+			})
+			.body(rawBody)
+			.retrieve()
+			.toEntity(ChatCompletionResponse.class);
+		// @formatter:on
+	}
+
+	/**
 	 * Creates a streaming chat response for the given chat conversation.
 	 * @param chatRequest The chat completion request. Must have the stream property set
 	 * to true.
@@ -209,13 +241,8 @@ public final class AnthropicApi {
 		Assert.isTrue(chatRequest.stream(), "Request must set the stream property to true.");
 		Assert.notNull(additionalHttpHeader, "The additional HTTP headers can not be null.");
 
-		AtomicBoolean isInsideTool = new AtomicBoolean(false);
-
-		AtomicReference<ChatCompletionResponseBuilder> chatCompletionReference = new AtomicReference<>(
-				new ChatCompletionResponseBuilder());
-
 		// @formatter:off
-		return this.webClient.post()
+		Flux<String> sseLines = this.webClient.post()
 			.uri(this.completionsPath)
 			.headers(headers -> {
 				headers.addAll(additionalHttpHeader);
@@ -223,7 +250,59 @@ public final class AnthropicApi {
 			}) // @formatter:off
 			.body(Mono.just(chatRequest), ChatCompletionRequest.class)
 			.retrieve()
-			.bodyToFlux(String.class)
+			.bodyToFlux(String.class);
+
+		return parseChatCompletionStream(sseLines);
+	}
+
+	/**
+	 * Creates a streaming chat response from a raw, pre-serialized request body sent
+	 * verbatim to the completions endpoint. Mirrors {@link #chatCompletionStream} but
+	 * forwards the original client body without reconstructing it. Forwarded headers are
+	 * added as request-level headers, so they shadow the client's default headers (e.g.
+	 * anthropic-version, anthropic-beta) and suppress the lazily injected API key —
+	 * stripping sensitive headers such as x-api-key is the calling gateway's
+	 * responsibility.
+	 * @param rawBody the raw JSON request body, sent as-is. Must have the stream property
+	 * set to true.
+	 * @param additionalHttpHeader Optional, additional HTTP headers to be added to the
+	 * request only when not already present.
+	 * @return Returns a {@link Flux} stream from chat completion chunks.
+	 */
+	public Flux<ChatCompletionResponse> chatCompletionStreamRaw(String rawBody,
+			MultiValueMap<String, String> additionalHttpHeader) {
+
+		Assert.notNull(rawBody, "The request body can not be null.");
+		Assert.notNull(additionalHttpHeader, "The additional HTTP headers can not be null.");
+
+		// @formatter:off
+		Flux<String> sseLines = this.webClient.post()
+			.uri(this.completionsPath)
+			.headers(headers -> {
+				addHeadersIfMissing(headers, additionalHttpHeader);
+				addDefaultHeadersIfMissing(headers);
+			}) // @formatter:on
+			.bodyValue(rawBody)
+			.retrieve()
+			.bodyToFlux(String.class);
+
+		return parseChatCompletionStream(sseLines);
+	}
+
+	/**
+	 * Shared SSE parsing pipeline for the typed and raw streaming paths: parses
+	 * {@link StreamEvent}s, drops pings, merges tool-use event windows and assembles
+	 * {@link ChatCompletionResponse} chunks.
+	 */
+	private Flux<ChatCompletionResponse> parseChatCompletionStream(Flux<String> sseLines) {
+
+		AtomicBoolean isInsideTool = new AtomicBoolean(false);
+
+		AtomicReference<ChatCompletionResponseBuilder> chatCompletionReference = new AtomicReference<>(
+				new ChatCompletionResponseBuilder());
+
+		// @formatter:off
+		return sseLines
 			.takeUntil(SSE_DONE_PREDICATE)
 			.filter(SSE_DONE_PREDICATE.negate())
 			.map(content -> ModelOptionsUtils.jsonToObject(content, StreamEvent.class))
@@ -254,6 +333,7 @@ public final class AnthropicApi {
 			.flatMap(mono -> mono)
 			.map(event -> this.streamHelper.eventToChatCompletionResponse(event, chatCompletionReference))
 			.filter(chatCompletionResponse -> chatCompletionResponse.type() != null);
+		// @formatter:on
 	}
 
 	private void addDefaultHeadersIfMissing(HttpHeaders headers) {
@@ -263,6 +343,21 @@ public final class AnthropicApi {
 				headers.add(HEADER_X_API_KEY, apiKeyValue);
 			}
 		}
+	}
+
+	/**
+	 * Adds the given headers only when the key is not already present in the
+	 * request-level headers. Note that the request headers start out empty, so forwarded
+	 * headers land first: they shadow the client's default headers and suppress the
+	 * lazily injected API key. Guarding auth headers (x-api-key etc.) is the calling
+	 * gateway's responsibility.
+	 */
+	private void addHeadersIfMissing(HttpHeaders headers, MultiValueMap<String, String> additionalHttpHeader) {
+		additionalHttpHeader.forEach((key, values) -> {
+			if (!headers.containsKey(key)) {
+				headers.addAll(key, values);
+			}
+		});
 	}
 
 	/**
