@@ -303,7 +303,12 @@ public final class AnthropicApi {
 
 		// @formatter:off
 		return sseLines
-			.takeUntil(SSE_DONE_PREDICATE)
+			// Do NOT takeUntil("[DONE]"): cancelling on the sentinel closes the
+			// connection before the body is drained, defeating connection reuse and
+			// making the gateway drop TLS handshakes under load (see OpenAiApi). The
+			// native Anthropic protocol has no "[DONE]" sentinel, but an
+			// OpenAI-compatible gateway serving this dialect may emit one, so it is
+			// still filtered out. The stream is drained to EOF.
 			.filter(SSE_DONE_PREDICATE.negate())
 			.map(content -> ModelOptionsUtils.jsonToObject(content, StreamEvent.class))
 			.filter(event -> event.type() != EventType.PING)
