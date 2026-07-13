@@ -194,6 +194,34 @@ class StreamHelperTests {
 	}
 
 	@Test
+	void testMessageDeltaEventCarriesGatewayPricing() {
+		StreamHelper streamHelper = new StreamHelper();
+		AtomicReference<ChatCompletionResponseBuilder> contentBlockReference = new AtomicReference<>();
+
+		Usage usage = new Usage(100, 0, 30, 50);
+		ChatCompletionResponse initialMessage = new ChatCompletionResponse("msg-1", "message", Role.ASSISTANT,
+				List.of(), "claude-3-5-sonnet", null, null, usage);
+		MessageStartEvent startEvent = new MessageStartEvent(AnthropicApi.EventType.MESSAGE_START, initialMessage);
+		streamHelper.eventToChatCompletionResponse(startEvent, contentBlockReference);
+
+		// OpenAI-compatible gateways (e.g. OhMyCode) inject price/price_with_discount
+		// into the terminal message_delta usage block; they must survive the merge.
+		MessageDeltaEvent.MessageDelta delta = new MessageDeltaEvent.MessageDelta("end_turn", null);
+		MessageDeltaEvent.MessageDeltaUsage deltaUsage = new MessageDeltaEvent.MessageDeltaUsage(15, "0.0123",
+				"0.0045");
+		MessageDeltaEvent deltaEvent = new MessageDeltaEvent(AnthropicApi.EventType.MESSAGE_DELTA, delta, deltaUsage);
+
+		ChatCompletionResponse response = streamHelper.eventToChatCompletionResponse(deltaEvent, contentBlockReference);
+
+		assertThat(response.usage().outputTokens()).isEqualTo(15);
+		// Token counts from message_start survive alongside the injected pricing.
+		assertThat(response.usage().inputTokens()).isEqualTo(100);
+		assertThat(response.usage().cacheReadInputTokens()).isEqualTo(50);
+		assertThat(response.usage().price()).isEqualTo("0.0123");
+		assertThat(response.usage().priceWithDiscount()).isEqualTo("0.0045");
+	}
+
+	@Test
 	void testPingEvent() {
 		StreamHelper streamHelper = new StreamHelper();
 		AtomicReference<ChatCompletionResponseBuilder> contentBlockReference = new AtomicReference<>();

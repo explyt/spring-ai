@@ -1489,6 +1489,12 @@ public final class AnthropicApi {
 	 *
 	 * @param inputTokens The number of input tokens which were used.
 	 * @param outputTokens The number of output tokens which were used. completion).
+	 * @param price Optional price of the request as a string. Not part of the native
+	 * Anthropic API: OpenAI-compatible gateways serving the Anthropic dialect (e.g.
+	 * OhMyCode) inject it into the terminal usage block, mirroring the OpenAI surface.
+	 * @param priceWithDiscount Optional price of the request with discount applied, as a
+	 * string. Same gateway extension as {@code price}; when present it is the canonical
+	 * billing cost.
 	 */
 	@JsonInclude(Include.NON_NULL)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1497,8 +1503,15 @@ public final class AnthropicApi {
 		@JsonProperty("input_tokens") Integer inputTokens,
 		@JsonProperty("output_tokens") Integer outputTokens,
 		@JsonProperty("cache_creation_input_tokens") Integer cacheCreationInputTokens,
-		@JsonProperty("cache_read_input_tokens") Integer cacheReadInputTokens) {
+		@JsonProperty("cache_read_input_tokens") Integer cacheReadInputTokens,
+		@JsonProperty("price") String price,
+		@JsonProperty("price_with_discount") String priceWithDiscount) {
 		// @formatter:off
+
+		public Usage(Integer inputTokens, Integer outputTokens, Integer cacheCreationInputTokens,
+				Integer cacheReadInputTokens) {
+			this(inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens, null, null);
+		}
 	}
 
 	 /// ECB STOP
@@ -1793,7 +1806,13 @@ public final class AnthropicApi {
 		@JsonInclude(Include.NON_NULL)
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record MessageDeltaUsage(
-			@JsonProperty("output_tokens") Integer outputTokens) {
+			@JsonProperty("output_tokens") Integer outputTokens,
+			@JsonProperty("price") String price,
+			@JsonProperty("price_with_discount") String priceWithDiscount) {
+
+			public MessageDeltaUsage(Integer outputTokens) {
+				this(outputTokens, null, null);
+			}
 		}
 	}
 	// @formatter:on
