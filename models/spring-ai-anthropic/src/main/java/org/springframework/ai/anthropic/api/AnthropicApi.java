@@ -43,10 +43,12 @@ import org.springframework.ai.model.ModelOptionsUtils;
 import org.springframework.ai.model.SimpleApiKey;
 import org.springframework.ai.observation.conventions.AiProvider;
 import org.springframework.ai.retry.RetryUtils;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.util.Assert;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -290,11 +292,44 @@ public final class AnthropicApi {
 	}
 
 	/**
+	 * Raw-SSE source for the raw-response passthrough (tee) path. Performs the exact same
+	 * POST and header handling as {@link #chatCompletionStreamRaw}, but reads the response
+	 * body as {@link ServerSentEvent} frames WITHOUT filtering the {@code [DONE]}
+	 * sentinel and WITHOUT parsing (no ping dropping, no error swallowing). This preserves
+	 * each SSE frame verbatim — including the Anthropic {@code event:} names
+	 * ({@code message_start}, {@code ping}, {@code content_block_delta},
+	 * {@code message_delta}, {@code error}, ...) available via {@link ServerSentEvent#event()}
+	 * — so it can be forwarded to the client unchanged.
+	 * @param rawBody the raw JSON request body, sent as-is.
+	 * @param additionalHttpHeader Optional, additional HTTP headers added only when
+	 * absent.
+	 * @return a {@link Flux} of raw {@link ServerSentEvent} frames.
+	 */
+	public Flux<ServerSentEvent<String>> chatCompletionStreamRawSse(String rawBody,
+			MultiValueMap<String, String> additionalHttpHeader) {
+
+		Assert.notNull(rawBody, "The request body can not be null.");
+		Assert.notNull(additionalHttpHeader, "The additional HTTP headers can not be null.");
+
+		// @formatter:off
+		return this.webClient.post()
+			.uri(this.completionsPath)
+			.headers(headers -> {
+				addHeadersIfMissing(headers, additionalHttpHeader);
+				addDefaultHeadersIfMissing(headers);
+			}) // @formatter:on
+			.bodyValue(rawBody)
+			.retrieve()
+			.bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
+			});
+	}
+
+	/**
 	 * Shared SSE parsing pipeline for the typed and raw streaming paths: parses
 	 * {@link StreamEvent}s, drops pings, merges tool-use event windows and assembles
 	 * {@link ChatCompletionResponse} chunks.
 	 */
-	private Flux<ChatCompletionResponse> parseChatCompletionStream(Flux<String> sseLines) {
+	public Flux<ChatCompletionResponse> parseChatCompletionStream(Flux<String> sseLines) {
 
 		AtomicBoolean isInsideTool = new AtomicBoolean(false);
 
