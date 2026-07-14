@@ -25,7 +25,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
@@ -184,7 +187,27 @@ public class AnthropicChatModel implements ChatModel {
 		return this.internalCall(requestPrompt, null);
 	}
 
+	/**
+	 * Raw passthrough variant of {@link #call(Prompt)}: forwards {@code rawBody} verbatim
+	 * to the provider (with model/stream overrides applied, and max_tokens injected only
+	 * when absent) instead of reconstructing the request body. The response is parsed
+	 * exactly as in the normal path, so raw bodies that elicit content block types the
+	 * typed response pipeline does not understand (e.g. server tools such as web_search)
+	 * are not supported. Callers must disable internal tool execution
+	 * ({@code internalToolExecutionEnabled=false}): the raw body is not re-forwarded
+	 * across tool-execution hops, so a tool-execution round-trip would silently fall back
+	 * to a reconstructed typed request.
+	 */
+	public ChatResponse callRaw(Prompt prompt, String rawBody) {
+		Prompt requestPrompt = buildRequestPrompt(prompt);
+		return this.internalCall(requestPrompt, null, rawBody);
+	}
+
 	public ChatResponse internalCall(Prompt prompt, ChatResponse previousChatResponse) {
+		return this.internalCall(prompt, previousChatResponse, null);
+	}
+
+	public ChatResponse internalCall(Prompt prompt, ChatResponse previousChatResponse, String rawBody) {
 		ChatCompletionRequest request = createRequest(prompt, false);
 
 		ChatModelObservationContext observationContext = ChatModelObservationContext.builder()
@@ -197,8 +220,11 @@ public class AnthropicChatModel implements ChatModel {
 					this.observationRegistry)
 			.observe(() -> {
 
-				ResponseEntity<ChatCompletionResponse> completionEntity = this.retryTemplate.execute(
-						ctx -> this.anthropicApi.chatCompletionEntity(request, this.getAdditionalHttpHeaders(prompt)));
+				ResponseEntity<ChatCompletionResponse> completionEntity = this.retryTemplate
+					.execute(ctx -> rawBody != null
+							? this.anthropicApi.chatCompletionEntityRaw(applyOverrides(rawBody, request),
+									this.getAdditionalHttpHeaders(prompt))
+							: this.anthropicApi.chatCompletionEntity(request, this.getAdditionalHttpHeaders(prompt)));
 
 				AnthropicApi.ChatCompletionResponse completionResponse = completionEntity.getBody();
 				AnthropicApi.Usage usage = completionResponse.usage();
@@ -247,7 +273,24 @@ public class AnthropicChatModel implements ChatModel {
 		return this.internalStream(requestPrompt, null);
 	}
 
+	/**
+	 * Raw passthrough variant of {@link #stream(Prompt)}: forwards {@code rawBody}
+	 * verbatim to the provider (with model/stream overrides applied, and max_tokens
+	 * injected only when absent) instead of reconstructing the request body. The response
+	 * stream is parsed exactly as in the normal path — see
+	 * {@link #callRaw(Prompt, String)} for the resulting limitations (unsupported content
+	 * block types, internal tool execution must be disabled by the caller).
+	 */
+	public Flux<ChatResponse> streamRaw(Prompt prompt, String rawBody) {
+		Prompt requestPrompt = buildRequestPrompt(prompt);
+		return this.internalStream(requestPrompt, null, rawBody);
+	}
+
 	public Flux<ChatResponse> internalStream(Prompt prompt, ChatResponse previousChatResponse) {
+		return this.internalStream(prompt, previousChatResponse, null);
+	}
+
+	public Flux<ChatResponse> internalStream(Prompt prompt, ChatResponse previousChatResponse, String rawBody) {
 		return Flux.deferContextual(contextView -> {
 			ChatCompletionRequest request = createRequest(prompt, true);
 
@@ -260,10 +303,14 @@ public class AnthropicChatModel implements ChatModel {
 					this.observationConvention, DEFAULT_OBSERVATION_CONVENTION, () -> observationContext,
 					this.observationRegistry);
 
-			observation.parentObservation(contextView.getOrDefault(ObservationThreadLocalAccessor.KEY, null)).start();
+			// Build the (lazy) response flux before starting the observation so that a
+			// synchronous applyOverrides failure cannot leak a started observation.
+			Flux<ChatCompletionResponse> response = rawBody != null
+					? this.anthropicApi.chatCompletionStreamRaw(applyOverrides(rawBody, request),
+							this.getAdditionalHttpHeaders(prompt))
+					: this.anthropicApi.chatCompletionStream(request, this.getAdditionalHttpHeaders(prompt));
 
-			Flux<ChatCompletionResponse> response = this.anthropicApi.chatCompletionStream(request,
-					this.getAdditionalHttpHeaders(prompt));
+			observation.parentObservation(contextView.getOrDefault(ObservationThreadLocalAccessor.KEY, null)).start();
 
 			// @formatter:off
 			Flux<ChatResponse> chatResponseFlux = response.flatMap(chatCompletionResponse -> {
@@ -535,6 +582,35 @@ public class AnthropicChatModel implements ChatModel {
 		}
 		return CollectionUtils.toMultiValueMap(
 				headers.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> List.of(e.getValue()))));
+	}
+
+	/**
+	 * Applies the minimal mandatory overrides to a raw passthrough request body before
+	 * sending it verbatim: the resolved provider {@code model} and the actual transport
+	 * {@code stream} flag. {@code max_tokens} is REQUIRED by the Anthropic Messages API,
+	 * so it is injected from the typed request only when the raw body does not carry it —
+	 * the client's own value is never overridden (passthrough semantics). Anthropic
+	 * always emits usage in streaming responses, so there is no include_usage analog.
+	 * Everything else is forwarded as-is.
+	 */
+	private String applyOverrides(String rawBody, ChatCompletionRequest request) {
+		try {
+			JsonNode tree = ModelOptionsUtils.OBJECT_MAPPER.readTree(rawBody);
+			if (!(tree instanceof ObjectNode root)) {
+				throw new IllegalArgumentException("Raw passthrough request body must be a JSON object");
+			}
+			if (request.model() != null) {
+				root.put("model", request.model());
+			}
+			root.put("stream", Boolean.TRUE.equals(request.stream()));
+			if (!root.hasNonNull("max_tokens") && request.maxTokens() != null) {
+				root.put("max_tokens", request.maxTokens());
+			}
+			return ModelOptionsUtils.OBJECT_MAPPER.writeValueAsString(root);
+		}
+		catch (JsonProcessingException e) {
+			throw new IllegalArgumentException("Failed to apply overrides to raw passthrough request body", e);
+		}
 	}
 
 	Prompt buildRequestPrompt(Prompt prompt) {

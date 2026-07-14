@@ -210,10 +210,13 @@ public class StreamHelper {
 			}
 
 			if (messageDeltaEvent.usage() != null) {
+				// Gateway pricing extension: OpenAI-compatible gateways (e.g. OhMyCode)
+				// inject price/price_with_discount into the terminal message_delta usage.
 				Usage totalUsage = new Usage(contentBlockReference.get().usage.inputTokens(),
 						messageDeltaEvent.usage().outputTokens(),
 						contentBlockReference.get().usage.cacheCreationInputTokens(),
-						contentBlockReference.get().usage.cacheReadInputTokens());
+						contentBlockReference.get().usage.cacheReadInputTokens(), messageDeltaEvent.usage().price(),
+						messageDeltaEvent.usage().priceWithDiscount());
 				contentBlockReference.get().withUsage(totalUsage);
 			}
 		}

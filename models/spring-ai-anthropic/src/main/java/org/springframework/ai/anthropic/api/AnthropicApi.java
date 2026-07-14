@@ -186,6 +186,38 @@ public final class AnthropicApi {
 	}
 
 	/**
+	 * Sends a raw, pre-serialized message request body verbatim to the completions
+	 * endpoint. Used by the raw passthrough path to forward the original client request
+	 * without reconstructing it. Forwarded headers are added as request-level headers, so
+	 * they shadow the client's default headers (e.g. anthropic-version, anthropic-beta)
+	 * and suppress the lazily injected API key — stripping sensitive headers such as
+	 * x-api-key is the calling gateway's responsibility.
+	 * @param rawBody the raw JSON request body, sent as-is.
+	 * @param additionalHttpHeader Optional, additional HTTP headers to be added to the
+	 * request only when not already present.
+	 * @return Entity response with {@link ChatCompletionResponse} as a body and HTTP
+	 * status code and headers.
+	 */
+	public ResponseEntity<ChatCompletionResponse> chatCompletionEntityRaw(String rawBody,
+			MultiValueMap<String, String> additionalHttpHeader) {
+
+		Assert.notNull(rawBody, "The request body can not be null.");
+		Assert.notNull(additionalHttpHeader, "The additional HTTP headers can not be null.");
+
+		// @formatter:off
+		return this.restClient.post()
+			.uri(this.completionsPath)
+			.headers(headers -> {
+				addHeadersIfMissing(headers, additionalHttpHeader);
+				addDefaultHeadersIfMissing(headers);
+			})
+			.body(rawBody)
+			.retrieve()
+			.toEntity(ChatCompletionResponse.class);
+		// @formatter:on
+	}
+
+	/**
 	 * Creates a streaming chat response for the given chat conversation.
 	 * @param chatRequest The chat completion request. Must have the stream property set
 	 * to true.
@@ -209,13 +241,8 @@ public final class AnthropicApi {
 		Assert.isTrue(chatRequest.stream(), "Request must set the stream property to true.");
 		Assert.notNull(additionalHttpHeader, "The additional HTTP headers can not be null.");
 
-		AtomicBoolean isInsideTool = new AtomicBoolean(false);
-
-		AtomicReference<ChatCompletionResponseBuilder> chatCompletionReference = new AtomicReference<>(
-				new ChatCompletionResponseBuilder());
-
 		// @formatter:off
-		return this.webClient.post()
+		Flux<String> sseLines = this.webClient.post()
 			.uri(this.completionsPath)
 			.headers(headers -> {
 				headers.addAll(additionalHttpHeader);
@@ -223,8 +250,65 @@ public final class AnthropicApi {
 			}) // @formatter:off
 			.body(Mono.just(chatRequest), ChatCompletionRequest.class)
 			.retrieve()
-			.bodyToFlux(String.class)
-			.takeUntil(SSE_DONE_PREDICATE)
+			.bodyToFlux(String.class);
+
+		return parseChatCompletionStream(sseLines);
+	}
+
+	/**
+	 * Creates a streaming chat response from a raw, pre-serialized request body sent
+	 * verbatim to the completions endpoint. Mirrors {@link #chatCompletionStream} but
+	 * forwards the original client body without reconstructing it. Forwarded headers are
+	 * added as request-level headers, so they shadow the client's default headers (e.g.
+	 * anthropic-version, anthropic-beta) and suppress the lazily injected API key —
+	 * stripping sensitive headers such as x-api-key is the calling gateway's
+	 * responsibility.
+	 * @param rawBody the raw JSON request body, sent as-is. Must have the stream property
+	 * set to true.
+	 * @param additionalHttpHeader Optional, additional HTTP headers to be added to the
+	 * request only when not already present.
+	 * @return Returns a {@link Flux} stream from chat completion chunks.
+	 */
+	public Flux<ChatCompletionResponse> chatCompletionStreamRaw(String rawBody,
+			MultiValueMap<String, String> additionalHttpHeader) {
+
+		Assert.notNull(rawBody, "The request body can not be null.");
+		Assert.notNull(additionalHttpHeader, "The additional HTTP headers can not be null.");
+
+		// @formatter:off
+		Flux<String> sseLines = this.webClient.post()
+			.uri(this.completionsPath)
+			.headers(headers -> {
+				addHeadersIfMissing(headers, additionalHttpHeader);
+				addDefaultHeadersIfMissing(headers);
+			}) // @formatter:on
+			.bodyValue(rawBody)
+			.retrieve()
+			.bodyToFlux(String.class);
+
+		return parseChatCompletionStream(sseLines);
+	}
+
+	/**
+	 * Shared SSE parsing pipeline for the typed and raw streaming paths: parses
+	 * {@link StreamEvent}s, drops pings, merges tool-use event windows and assembles
+	 * {@link ChatCompletionResponse} chunks.
+	 */
+	private Flux<ChatCompletionResponse> parseChatCompletionStream(Flux<String> sseLines) {
+
+		AtomicBoolean isInsideTool = new AtomicBoolean(false);
+
+		AtomicReference<ChatCompletionResponseBuilder> chatCompletionReference = new AtomicReference<>(
+				new ChatCompletionResponseBuilder());
+
+		// @formatter:off
+		return sseLines
+			// Do NOT takeUntil("[DONE]"): cancelling on the sentinel closes the
+			// connection before the body is drained, defeating connection reuse and
+			// making the gateway drop TLS handshakes under load (see OpenAiApi). The
+			// native Anthropic protocol has no "[DONE]" sentinel, but an
+			// OpenAI-compatible gateway serving this dialect may emit one, so it is
+			// still filtered out. The stream is drained to EOF.
 			.filter(SSE_DONE_PREDICATE.negate())
 			.map(content -> ModelOptionsUtils.jsonToObject(content, StreamEvent.class))
 			.filter(event -> event.type() != EventType.PING)
@@ -254,6 +338,7 @@ public final class AnthropicApi {
 			.flatMap(mono -> mono)
 			.map(event -> this.streamHelper.eventToChatCompletionResponse(event, chatCompletionReference))
 			.filter(chatCompletionResponse -> chatCompletionResponse.type() != null);
+		// @formatter:on
 	}
 
 	private void addDefaultHeadersIfMissing(HttpHeaders headers) {
@@ -263,6 +348,21 @@ public final class AnthropicApi {
 				headers.add(HEADER_X_API_KEY, apiKeyValue);
 			}
 		}
+	}
+
+	/**
+	 * Adds the given headers only when the key is not already present in the
+	 * request-level headers. Note that the request headers start out empty, so forwarded
+	 * headers land first: they shadow the client's default headers and suppress the
+	 * lazily injected API key. Guarding auth headers (x-api-key etc.) is the calling
+	 * gateway's responsibility.
+	 */
+	private void addHeadersIfMissing(HttpHeaders headers, MultiValueMap<String, String> additionalHttpHeader) {
+		additionalHttpHeader.forEach((key, values) -> {
+			if (!headers.containsKey(key)) {
+				headers.addAll(key, values);
+			}
+		});
 	}
 
 	/**
@@ -1389,6 +1489,12 @@ public final class AnthropicApi {
 	 *
 	 * @param inputTokens The number of input tokens which were used.
 	 * @param outputTokens The number of output tokens which were used. completion).
+	 * @param price Optional price of the request as a string. Not part of the native
+	 * Anthropic API: OpenAI-compatible gateways serving the Anthropic dialect (e.g.
+	 * OhMyCode) inject it into the terminal usage block, mirroring the OpenAI surface.
+	 * @param priceWithDiscount Optional price of the request with discount applied, as a
+	 * string. Same gateway extension as {@code price}; when present it is the canonical
+	 * billing cost.
 	 */
 	@JsonInclude(Include.NON_NULL)
 	@JsonIgnoreProperties(ignoreUnknown = true)
@@ -1397,8 +1503,15 @@ public final class AnthropicApi {
 		@JsonProperty("input_tokens") Integer inputTokens,
 		@JsonProperty("output_tokens") Integer outputTokens,
 		@JsonProperty("cache_creation_input_tokens") Integer cacheCreationInputTokens,
-		@JsonProperty("cache_read_input_tokens") Integer cacheReadInputTokens) {
+		@JsonProperty("cache_read_input_tokens") Integer cacheReadInputTokens,
+		@JsonProperty("price") String price,
+		@JsonProperty("price_with_discount") String priceWithDiscount) {
 		// @formatter:off
+
+		public Usage(Integer inputTokens, Integer outputTokens, Integer cacheCreationInputTokens,
+				Integer cacheReadInputTokens) {
+			this(inputTokens, outputTokens, cacheCreationInputTokens, cacheReadInputTokens, null, null);
+		}
 	}
 
 	 /// ECB STOP
@@ -1693,7 +1806,13 @@ public final class AnthropicApi {
 		@JsonInclude(Include.NON_NULL)
 		@JsonIgnoreProperties(ignoreUnknown = true)
 		public record MessageDeltaUsage(
-			@JsonProperty("output_tokens") Integer outputTokens) {
+			@JsonProperty("output_tokens") Integer outputTokens,
+			@JsonProperty("price") String price,
+			@JsonProperty("price_with_discount") String priceWithDiscount) {
+
+			public MessageDeltaUsage(Integer outputTokens) {
+				this(outputTokens, null, null);
+			}
 		}
 	}
 	// @formatter:on
