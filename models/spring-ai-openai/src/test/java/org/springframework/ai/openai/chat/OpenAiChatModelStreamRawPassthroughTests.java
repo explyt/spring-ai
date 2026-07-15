@@ -24,7 +24,7 @@ import reactor.core.publisher.Flux;
 
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.model.RawStreamItem;
+import org.springframework.ai.chat.model.DualStreamItem;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.openai.OpenAiChatModel;
@@ -46,9 +46,9 @@ import static org.mockito.Mockito.verify;
 /**
  * Unit tests for the OpenAI raw-response passthrough tee
  * ({@code OpenAiChatModel#streamRawPassthrough}): a single upstream SSE stream must be
- * emitted BOTH as verbatim {@link RawStreamItem.RawFrame}s (including unknown fields,
+ * emitted BOTH as verbatim {@link DualStreamItem.RawFrame}s (including unknown fields,
  * the usage frame and the {@code [DONE]} sentinel) AND as
- * {@link RawStreamItem.TypedChunk}s with correctly accumulated usage.
+ * {@link DualStreamItem.TypedChunk}s with correctly accumulated usage.
  */
 public class OpenAiChatModelStreamRawPassthroughTests {
 
@@ -87,8 +87,7 @@ public class OpenAiChatModelStreamRawPassthroughTests {
 	void teeEmitsVerbatimRawFramesAndTypedChunksWithUsage() {
 		setupChatModel(Flux.just(sse(CONTENT_CHUNK), sse(USAGE_CHUNK), sse(DONE)));
 
-		List<RawStreamItem> items = this.chatModel
-			.streamRawPassthrough(new Prompt("test"), "{\"messages\":[]}")
+		List<DualStreamItem> items = this.chatModel.streamRawPassthrough(new Prompt("test"), "{\"messages\":[]}")
 			.collectList()
 			.block();
 
@@ -96,9 +95,9 @@ public class OpenAiChatModelStreamRawPassthroughTests {
 
 		// RAW branch: every frame arrives verbatim, in order, with null event names,
 		// including the unknown vendor field and the [DONE] sentinel.
-		List<RawStreamItem.RawFrame> rawFrames = items.stream()
-			.filter(RawStreamItem.RawFrame.class::isInstance)
-			.map(RawStreamItem.RawFrame.class::cast)
+		List<DualStreamItem.RawFrame> rawFrames = items.stream()
+			.filter(DualStreamItem.RawFrame.class::isInstance)
+			.map(DualStreamItem.RawFrame.class::cast)
 			.toList();
 		assertThat(rawFrames).hasSize(3);
 		assertThat(rawFrames.get(0).data()).isEqualTo(CONTENT_CHUNK);
@@ -110,8 +109,8 @@ public class OpenAiChatModelStreamRawPassthroughTests {
 		// TYPED branch: the same pipeline as internalStream, so the usage from the
 		// final chunk is merged onto the content response (raw mode forces the gate).
 		List<ChatResponse> typedResponses = items.stream()
-			.filter(RawStreamItem.TypedChunk.class::isInstance)
-			.map(item -> ((RawStreamItem.TypedChunk) item).response())
+			.filter(DualStreamItem.TypedChunk.class::isInstance)
+			.map(item -> ((DualStreamItem.TypedChunk) item).response())
 			.toList();
 		assertThat(typedResponses).isNotEmpty();
 

@@ -357,11 +357,11 @@ public class OpenAiApi {
 
 	/**
 	 * Raw-SSE source for the raw-response passthrough (tee) path. Performs the exact same
-	 * POST and header handling as {@link #chatCompletionStreamRaw}, but reads the response
-	 * body as {@link ServerSentEvent} frames WITHOUT filtering the {@code [DONE]}
-	 * sentinel and WITHOUT parsing. This preserves each SSE frame verbatim (including the
-	 * final usage frame and {@code [DONE]}) so it can be forwarded to the client
-	 * unchanged.
+	 * POST and header handling as {@link #chatCompletionStreamRaw}, but reads the
+	 * response body as {@link ServerSentEvent} frames WITHOUT filtering the
+	 * {@code [DONE]} sentinel and WITHOUT parsing. This preserves each SSE frame verbatim
+	 * (including the final usage frame and {@code [DONE]}) so it can be forwarded to the
+	 * client unchanged.
 	 * @param rawBody the raw JSON request body, sent as-is.
 	 * @param additionalHttpHeader Optional, additional HTTP headers added only when
 	 * absent.

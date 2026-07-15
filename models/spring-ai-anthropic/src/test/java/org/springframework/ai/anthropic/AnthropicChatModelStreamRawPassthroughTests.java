@@ -24,7 +24,7 @@ import reactor.core.publisher.Flux;
 import org.springframework.ai.anthropic.api.AnthropicApi;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.model.RawStreamItem;
+import org.springframework.ai.chat.model.DualStreamItem;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.http.codec.ServerSentEvent;
 
@@ -38,10 +38,10 @@ import static org.mockito.Mockito.verify;
 
 /**
  * Unit tests for the Anthropic raw-response passthrough tee
- * ({@code AnthropicChatModel#streamRawPassthrough}): a single upstream SSE stream must
- * be emitted BOTH as verbatim {@link RawStreamItem.RawFrame}s - preserving the Anthropic
+ * ({@code AnthropicChatModel#streamRawPassthrough}): a single upstream SSE stream must be
+ * emitted BOTH as verbatim {@link DualStreamItem.RawFrame}s - preserving the Anthropic
  * {@code event:} names, ping events, error events and unknown fields - AND as
- * {@link RawStreamItem.TypedChunk}s with correctly parsed usage.
+ * {@link DualStreamItem.TypedChunk}s with correctly parsed usage.
  */
 public class AnthropicChatModelStreamRawPassthroughTests {
 
@@ -97,7 +97,7 @@ public class AnthropicChatModelStreamRawPassthroughTests {
 	void teeEmitsVerbatimRawFramesWithEventNamesAndTypedChunksWithUsage() {
 		setupChatModel(defaultFrames());
 
-		List<RawStreamItem> items = this.chatModel
+		List<DualStreamItem> items = this.chatModel
 			.streamRawPassthrough(new Prompt("typed prompt"), "{\"max_tokens\":100,\"messages\":[]}")
 			.collectList()
 			.block();
@@ -106,12 +106,12 @@ public class AnthropicChatModelStreamRawPassthroughTests {
 
 		// RAW branch: every frame arrives verbatim and in order - including the ping
 		// event, the event: names and the unknown vendor field.
-		List<RawStreamItem.RawFrame> rawFrames = items.stream()
-			.filter(RawStreamItem.RawFrame.class::isInstance)
-			.map(RawStreamItem.RawFrame.class::cast)
+		List<DualStreamItem.RawFrame> rawFrames = items.stream()
+			.filter(DualStreamItem.RawFrame.class::isInstance)
+			.map(DualStreamItem.RawFrame.class::cast)
 			.toList();
 		assertThat(rawFrames).hasSize(7);
-		assertThat(rawFrames).extracting(RawStreamItem.RawFrame::event)
+		assertThat(rawFrames).extracting(DualStreamItem.RawFrame::event)
 			.containsExactly("message_start", "ping", "content_block_start", "content_block_delta",
 					"content_block_stop", "message_delta", "message_stop");
 		assertThat(rawFrames.get(0).data()).isEqualTo(MESSAGE_START);
@@ -122,14 +122,15 @@ public class AnthropicChatModelStreamRawPassthroughTests {
 		// TYPED branch: the same parse pipeline as internalStream (pings dropped,
 		// events assembled), producing the assistant text and the parsed usage.
 		List<ChatResponse> typedResponses = items.stream()
-			.filter(RawStreamItem.TypedChunk.class::isInstance)
-			.map(item -> ((RawStreamItem.TypedChunk) item).response())
+			.filter(DualStreamItem.TypedChunk.class::isInstance)
+			.map(item -> ((DualStreamItem.TypedChunk) item).response())
 			.toList();
 		assertThat(typedResponses).isNotEmpty();
 
 		assertThat(typedResponses.stream()
 			.anyMatch(r -> r.getResult() != null && r.getResult().getOutput().getText() != null
-					&& r.getResult().getOutput().getText().contains("Hello there"))).isTrue();
+					&& r.getResult().getOutput().getText().contains("Hello there")))
+			.isTrue();
 
 		// The terminal message_delta merges the output tokens with the input tokens
 		// remembered from message_start.
@@ -146,19 +147,18 @@ public class AnthropicChatModelStreamRawPassthroughTests {
 
 	@Test
 	void errorEventsAreForwardedVerbatimInRawBranch() {
-		String error = "{\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\","
-				+ "\"message\":\"Overloaded\"}}";
-		setupChatModel(Flux.just(sse("message_start", MESSAGE_START), sse("error", error),
-				sse("message_stop", MESSAGE_STOP)));
+		String error = "{\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\"," + "\"message\":\"Overloaded\"}}";
+		setupChatModel(
+				Flux.just(sse("message_start", MESSAGE_START), sse("error", error), sse("message_stop", MESSAGE_STOP)));
 
-		List<RawStreamItem> items = this.chatModel
+		List<DualStreamItem> items = this.chatModel
 			.streamRawPassthrough(new Prompt("typed prompt"), "{\"max_tokens\":100,\"messages\":[]}")
 			.collectList()
 			.block();
 
-		List<RawStreamItem.RawFrame> rawFrames = items.stream()
-			.filter(RawStreamItem.RawFrame.class::isInstance)
-			.map(RawStreamItem.RawFrame.class::cast)
+		List<DualStreamItem.RawFrame> rawFrames = items.stream()
+			.filter(DualStreamItem.RawFrame.class::isInstance)
+			.map(DualStreamItem.RawFrame.class::cast)
 			.toList();
 
 		// The error event must reach the raw branch verbatim (not swallowed like in

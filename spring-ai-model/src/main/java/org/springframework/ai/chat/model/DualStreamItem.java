@@ -17,22 +17,13 @@
 package org.springframework.ai.chat.model;
 
 /**
- * Item emitted by a raw-response passthrough stream. A single provider HTTP stream is
- * "teed" into two logical streams that share one upstream subscription:
- * <ul>
- * <li>{@link TypedChunk} — the typed {@link ChatResponse} produced by the exact same
- * parsing pipeline used by the normal streaming path (for usage accounting and audit);
- * <li>{@link RawFrame} — the raw provider SSE frame, forwarded verbatim, so the caller
- * can relay it to its own client without lossy re-serialization.
- * </ul>
- *
- * <p>
- * This sealed type intentionally forces the (single) consumer to handle both variants and
- * prevents the raw variant from leaking into the existing typed operators.
+ * "Dual" = each element is EITHER the typed parse ({@link TypedChunk}, for usage/audit)
+ * OR the verbatim raw provider SSE frame ({@link RawFrame}, to relay), from one teed
+ * stream.
  *
  * @since 1.1.7
  */
-public sealed interface RawStreamItem permits RawStreamItem.TypedChunk, RawStreamItem.RawFrame {
+public sealed interface DualStreamItem permits DualStreamItem.TypedChunk, DualStreamItem.RawFrame {
 
 	/**
 	 * The typed parse of a provider chunk, identical to what the normal streaming path
@@ -40,7 +31,7 @@ public sealed interface RawStreamItem permits RawStreamItem.TypedChunk, RawStrea
 	 *
 	 * @param response the typed chat response
 	 */
-	record TypedChunk(ChatResponse response) implements RawStreamItem {
+	record TypedChunk(ChatResponse response) implements DualStreamItem {
 	}
 
 	/**
@@ -51,7 +42,7 @@ public sealed interface RawStreamItem permits RawStreamItem.TypedChunk, RawStrea
 	 * @param data the SSE frame body verbatim, including sentinels such as {@code [DONE]}
 	 * and usage frames
 	 */
-	record RawFrame(String event, String data) implements RawStreamItem {
+	record RawFrame(String event, String data) implements DualStreamItem {
 	}
 
 }

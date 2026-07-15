@@ -47,7 +47,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.model.MessageAggregator;
-import org.springframework.ai.chat.model.RawStreamItem;
+import org.springframework.ai.chat.model.DualStreamItem;
 import org.springframework.ai.chat.model.StreamingChatModel;
 import org.springframework.ai.chat.observation.ChatModelObservationContext;
 import org.springframework.ai.chat.observation.ChatModelObservationConvention;
@@ -380,17 +380,18 @@ public class OpenAiChatModel implements ChatModel {
 	/**
 	 * Raw-response passthrough (tee) variant of {@link #streamRaw(Prompt, String)}: from
 	 * a SINGLE provider HTTP stream it emits BOTH the raw provider SSE frames verbatim
-	 * (as {@link RawStreamItem.RawFrame}) for forwarding to the client AND the typed parse
-	 * (as {@link RawStreamItem.TypedChunk}) produced by the exact same pipeline used by
-	 * {@link #internalStream}, for usage/billing and audit. Only one HTTP request is made:
-	 * the source is shared via {@code publish().autoConnect(2)} so both branches subscribe
-	 * before upstream starts and no frame is lost. Tool execution is intentionally NOT
-	 * performed here (the caller disables internal tool execution in raw mode).
+	 * (as {@link DualStreamItem.RawFrame}) for forwarding to the client AND the typed
+	 * parse (as {@link DualStreamItem.TypedChunk}) produced by the exact same pipeline
+	 * used by {@link #internalStream}, for usage/billing and audit. Only one HTTP request
+	 * is made: the source is shared via {@code publish().autoConnect(2)} so both branches
+	 * subscribe before upstream starts and no frame is lost. Tool execution is
+	 * intentionally NOT performed here (the caller disables internal tool execution in
+	 * raw mode).
 	 * @param prompt the prompt (used to resolve model/headers/overrides).
 	 * @param rawBody the raw JSON request body, forwarded verbatim after overrides.
 	 * @return a merged {@link Flux} of typed and raw items.
 	 */
-	public Flux<RawStreamItem> streamRawPassthrough(Prompt prompt, String rawBody) {
+	public Flux<DualStreamItem> streamRawPassthrough(Prompt prompt, String rawBody) {
 		return Flux.deferContextual(contextView -> {
 			Prompt requestPrompt = buildRequestPrompt(prompt);
 			ChatCompletionRequest request = createRequest(requestPrompt, true);
@@ -417,19 +418,18 @@ public class OpenAiChatModel implements ChatModel {
 
 			// RAW branch: forward each SSE frame verbatim. For the OpenAI chat dialect
 			// there are no event names, so sse.event() is normally null.
-			Flux<RawStreamItem> rawItems = connectable
-				.map(sse -> new RawStreamItem.RawFrame(sse.event(), sse.data()));
+			Flux<DualStreamItem> rawItems = connectable
+				.map(sse -> new DualStreamItem.RawFrame(sse.event(), sse.data()));
 
 			// TYPED branch: run the identical chunk->ChatResponse + usage pipeline as the
 			// normal streaming path. rawBody is non-null here, so usage accumulation is
 			// gated on. No tool execution in raw mode.
-			Flux<OpenAiApi.ChatCompletionChunk> completionChunks = this.openAiApi
-				.parseChatCompletionChunks(connectable.map(org.springframework.http.codec.ServerSentEvent::data)
-					.filter(Objects::nonNull));
-			Flux<RawStreamItem> typedItems = mapChunksToChatResponses(completionChunks, request, true, null)
-				.map(RawStreamItem.TypedChunk::new);
+			Flux<OpenAiApi.ChatCompletionChunk> completionChunks = this.openAiApi.parseChatCompletionChunks(
+					connectable.map(org.springframework.http.codec.ServerSentEvent::data).filter(Objects::nonNull));
+			Flux<DualStreamItem> typedItems = mapChunksToChatResponses(completionChunks, request, true, null)
+				.map(DualStreamItem.TypedChunk::new);
 
-			return Flux.<RawStreamItem>merge(typedItems, rawItems)
+			return Flux.<DualStreamItem>merge(typedItems, rawItems)
 				.doOnError(observation::error)
 				.doFinally(s -> observation.stop())
 				.contextWrite(ctx -> ctx.put(ObservationThreadLocalAccessor.KEY, observation));
