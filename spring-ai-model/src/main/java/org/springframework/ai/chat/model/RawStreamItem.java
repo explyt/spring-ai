@@ -22,8 +22,8 @@ package org.springframework.ai.chat.model;
  * <ul>
  * <li>{@link TypedChunk} — the typed {@link ChatResponse} produced by the exact same
  * parsing pipeline used by the normal streaming path (for usage accounting and audit);
- * <li>{@link RawFrame} — the raw provider SSE frame, forwarded verbatim, so the caller can
- * relay it to its own client without lossy re-serialization.
+ * <li>{@link RawFrame} — the raw provider SSE frame, forwarded verbatim, so the caller
+ * can relay it to its own client without lossy re-serialization.
  * </ul>
  *
  * <p>
