@@ -23,7 +23,35 @@ package org.springframework.ai.chat.model;
  *
  * @since 1.1.7
  */
-public sealed interface DualStreamItem permits DualStreamItem.TypedChunk, DualStreamItem.RawFrame {
+public sealed interface DualStreamItem
+		permits DualStreamItem.TypedChunk, DualStreamItem.RawFrame, DualStreamItem.ModeAnnounce {
+
+	/**
+	 * The client-facing delivery mode of a dual stream, announced by
+	 * {@link ModeAnnounce}.
+	 *
+	 * Only used by ExplytChatModel, is not emitted by spring-ai itself.
+	 */
+	enum DeliveryMode {
+
+		/** The client receives the provider frames verbatim ({@link RawFrame}s). */
+		RAW,
+
+		/** The client receives the reconstructed typed events ({@link TypedChunk}s). */
+		TYPED
+
+	}
+
+	/**
+	 * One-shot announcement of the stream's client-facing delivery mode. When present it
+	 * is the FIRST item of the stream, so a consumer can route on it without waiting for
+	 * (or guessing from) the first data item. It is plumbing, not data: it carries no
+	 * provider bytes and no typed parse.
+	 *
+	 * @param mode the resolved client-facing delivery mode
+	 */
+	record ModeAnnounce(DeliveryMode mode) implements DualStreamItem {
+	}
 
 	/**
 	 * The typed parse of a provider chunk, identical to what the normal streaming path
