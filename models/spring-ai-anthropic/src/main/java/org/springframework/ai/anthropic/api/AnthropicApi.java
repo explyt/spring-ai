@@ -1648,7 +1648,7 @@ public final class AnthropicApi {
 		@JsonProperty("content_block") ContentBlockBody contentBlock) implements StreamEvent {
 
 		@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type",
-				visible = true)
+				visible = true, defaultImpl = UnknownContentBlock.class)
 		@JsonSubTypes({
 				@JsonSubTypes.Type(value = ContentBlockToolUse.class, name = "tool_use"),
 				@JsonSubTypes.Type(value = ContentBlockText.class, name = "text"),
@@ -1656,6 +1656,19 @@ public final class AnthropicApi {
 		})
 		public interface ContentBlockBody {
 			String type();
+		}
+
+		/**
+		 * Fallback for content block types this client does not model explicitly, e.g.
+		 * server-side tools such as web_search (`server_tool_use`,
+		 * `web_search_tool_result`). Keeps parsing tolerant so an unknown block does not
+		 * abort the whole stream; the raw passthrough carries the verbatim payload.
+		 * @param type The content block type.
+		 */
+		@JsonInclude(Include.NON_NULL)
+		@JsonIgnoreProperties(ignoreUnknown = true)
+		public record UnknownContentBlock(
+			@JsonProperty("type") String type) implements ContentBlockBody {
 		}
 
 		/**
@@ -1718,7 +1731,7 @@ public final class AnthropicApi {
 		@JsonProperty("delta") ContentBlockDeltaBody delta) implements StreamEvent {
 
 		@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type",
-				visible = true)
+				visible = true, defaultImpl = UnknownContentBlockDelta.class)
 		@JsonSubTypes({ @JsonSubTypes.Type(value = ContentBlockDeltaText.class, name = "text_delta"),
 				@JsonSubTypes.Type(value = ContentBlockDeltaJson.class, name = "input_json_delta"),
 				@JsonSubTypes.Type(value = ContentBlockDeltaThinking.class, name = "thinking_delta"),
@@ -1726,6 +1739,19 @@ public final class AnthropicApi {
 		})
 		public interface ContentBlockDeltaBody {
 			String type();
+		}
+
+		/**
+		 * Fallback for content block delta types this client does not model explicitly,
+		 * e.g. server-side tool deltas such as `citations_delta`. Keeps parsing tolerant
+		 * so an unknown delta does not abort the whole stream; the raw passthrough
+		 * carries the verbatim payload.
+		 * @param type The content block delta type.
+		 */
+		@JsonInclude(Include.NON_NULL)
+		@JsonIgnoreProperties(ignoreUnknown = true)
+		public record UnknownContentBlockDelta(
+			@JsonProperty("type") String type) implements ContentBlockDeltaBody {
 		}
 
 		/**

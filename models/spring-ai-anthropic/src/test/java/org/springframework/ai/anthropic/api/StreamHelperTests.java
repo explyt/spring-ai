@@ -33,7 +33,9 @@ import org.springframework.ai.anthropic.api.AnthropicApi.MessageStopEvent;
 import org.springframework.ai.anthropic.api.AnthropicApi.PingEvent;
 import org.springframework.ai.anthropic.api.AnthropicApi.Role;
 import org.springframework.ai.anthropic.api.AnthropicApi.Usage;
+import org.springframework.ai.anthropic.api.AnthropicApi.StreamEvent;
 import org.springframework.ai.anthropic.api.StreamHelper.ChatCompletionResponseBuilder;
+import org.springframework.ai.model.ModelOptionsUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
@@ -389,7 +391,46 @@ class StreamHelperTests {
 	}
 
 	@Test
+	void serverToolUseStartEventDeserializesInsteadOfThrowing() {
+		// Regression: a real web_search server_tool_use start frame used to fail
+		// deserialization with InvalidTypeIdException (known ids:
+		// text/tool_use/thinking),
+		// aborting the whole dual-carry stream. It must now parse into the tolerant
+		// UnknownContentBlock fallback.
+		String frame = ("{'type':'content_block_start','index':1,'content_block':{'type':'server_tool_use',"
+				+ "'id':'srvtoolu_01','name':'web_search','input':{}}}")
+			.replace('\'', '"');
+
+		StreamEvent event = ModelOptionsUtils.jsonToObject(frame, StreamEvent.class);
+
+		assertThat(event).isInstanceOf(ContentBlockStartEvent.class);
+		ContentBlockStartEvent start = (ContentBlockStartEvent) event;
+		assertThat(start.contentBlock().type()).isEqualTo("server_tool_use");
+	}
+
+	@Test
+	void citationsDeltaEventDeserializesInsteadOfThrowing() {
+		// Regression: a web_search citations_delta frame used to fail deserialization
+		// (known delta ids: text_delta/input_json_delta/thinking_delta/signature_delta),
+		// aborting the stream. It must now parse into the tolerant
+		// UnknownContentBlockDelta.
+		String frame = ("{'type':'content_block_delta','index':4,'delta':{'type':'citations_delta',"
+				+ "'citation':{'type':'web_search_result_location','url':'https://example.com'}}}")
+			.replace('\'', '"');
+
+		StreamEvent event = ModelOptionsUtils.jsonToObject(frame, StreamEvent.class);
+
+		assertThat(event).isInstanceOf(ContentBlockDeltaEvent.class);
+		ContentBlockDeltaEvent delta = (ContentBlockDeltaEvent) event;
+		assertThat(delta.delta().type()).isEqualTo("citations_delta");
+	}
+
+	@Test
 	void testUnsupportedContentBlockType() {
+		// Unknown block types
+		// server_tool_use / web_search_tool_result) must NOT abort the stream. The typed
+		// reconstruction skips them (empty content) while the raw passthrough carries the
+		// verbatim payload.
 		StreamHelper streamHelper = new StreamHelper();
 		AtomicReference<ChatCompletionResponseBuilder> contentBlockReference = new AtomicReference<>();
 
@@ -399,18 +440,23 @@ class StreamHelperTests {
 		MessageStartEvent startEvent = new MessageStartEvent(AnthropicApi.EventType.MESSAGE_START, message);
 		streamHelper.eventToChatCompletionResponse(startEvent, contentBlockReference);
 
-		ContentBlockStartEvent.ContentBlockBody unsupportedBlock = () -> "unsupported_type";
+		ContentBlockStartEvent.ContentBlockBody unsupportedBlock = () -> "server_tool_use";
 
 		ContentBlockStartEvent unsupportedEvent = new ContentBlockStartEvent(AnthropicApi.EventType.CONTENT_BLOCK_START,
 				0, unsupportedBlock);
 
-		assertThatThrownBy(() -> streamHelper.eventToChatCompletionResponse(unsupportedEvent, contentBlockReference))
-			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("Unsupported content block type");
+		ChatCompletionResponse response = streamHelper.eventToChatCompletionResponse(unsupportedEvent,
+				contentBlockReference);
+
+		assertThat(response).isNotNull();
+		assertThat(response.content()).isEmpty();
 	}
 
 	@Test
 	void testUnsupportedContentBlockDeltaType() {
+		// Unknown delta types (e.g. citations_delta from server-side web_search) must NOT
+		// abort the stream. The typed reconstruction skips them (empty content) while the
+		// raw passthrough carries the verbatim payload.
 		StreamHelper streamHelper = new StreamHelper();
 		AtomicReference<ChatCompletionResponseBuilder> contentBlockReference = new AtomicReference<>();
 
@@ -420,14 +466,16 @@ class StreamHelperTests {
 		MessageStartEvent startEvent = new MessageStartEvent(AnthropicApi.EventType.MESSAGE_START, message);
 		streamHelper.eventToChatCompletionResponse(startEvent, contentBlockReference);
 
-		ContentBlockDeltaEvent.ContentBlockDeltaBody unsupportedDelta = () -> "unsupported_delta_type";
+		ContentBlockDeltaEvent.ContentBlockDeltaBody unsupportedDelta = () -> "citations_delta";
 
 		ContentBlockDeltaEvent unsupportedEvent = new ContentBlockDeltaEvent(AnthropicApi.EventType.CONTENT_BLOCK_DELTA,
 				0, unsupportedDelta);
 
-		assertThatThrownBy(() -> streamHelper.eventToChatCompletionResponse(unsupportedEvent, contentBlockReference))
-			.isInstanceOf(IllegalArgumentException.class)
-			.hasMessageContaining("Unsupported content block delta type");
+		ChatCompletionResponse response = streamHelper.eventToChatCompletionResponse(unsupportedEvent,
+				contentBlockReference);
+
+		assertThat(response).isNotNull();
+		assertThat(response.content()).isEmpty();
 	}
 
 	@Test
