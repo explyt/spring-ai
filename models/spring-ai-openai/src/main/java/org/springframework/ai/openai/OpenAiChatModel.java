@@ -47,6 +47,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.model.MessageAggregator;
+import org.springframework.ai.chat.model.DualStreamItem;
 import org.springframework.ai.chat.model.StreamingChatModel;
 import org.springframework.ai.chat.observation.ChatModelObservationContext;
 import org.springframework.ai.chat.observation.ChatModelObservationConvention;
@@ -319,10 +320,6 @@ public class OpenAiChatModel implements ChatModel {
 							getAdditionalHttpHeaders(prompt))
 					: this.openAiApi.chatCompletionStream(request, getAdditionalHttpHeaders(prompt));
 
-			// For chunked responses, only the first chunk contains the choice role.
-			// The rest of the chunks with same ID share the same role.
-			ConcurrentHashMap<String, String> roleMap = new ConcurrentHashMap<>();
-
 			final ChatModelObservationContext observationContext = ChatModelObservationContext.builder()
 				.prompt(prompt)
 				.provider(OpenAiApiConstants.PROVIDER_NAME)
@@ -336,69 +333,8 @@ public class OpenAiChatModel implements ChatModel {
 
 			// Convert the ChatCompletionChunk into a ChatCompletion to be able to reuse
 			// the function call handling logic.
-			Flux<ChatResponse> chatResponse = completionChunks.map(this::chunkToChatCompletion)
-				.switchMap(chatCompletion -> Mono.just(chatCompletion).map(chatCompletion2 -> {
-					try {
-						// If an id is not provided, set to "NO_ID" (for compatible APIs).
-						String id = chatCompletion2.id() == null ? "NO_ID" : chatCompletion2.id();
-
-						List<Generation> generations = chatCompletion2.choices().stream().map(choice -> { // @formatter:off
-							if (choice.message().role() != null) {
-								roleMap.putIfAbsent(id, choice.message().role().name());
-							}
-							Map<String, Object> metadata = Map.of(
-									"id", id,
-									"role", roleMap.getOrDefault(id, ""),
-									"index", choice.index() != null ? choice.index() : 0,
-									"finishReason", getFinishReasonJson(choice.finishReason()),
-									"refusal", StringUtils.hasText(choice.message().refusal()) ? choice.message().refusal() : "",
-									"annotations", choice.message().annotations() != null ? choice.message().annotations() : List.of());
-							return buildGeneration(choice, metadata, request);
-						}).toList();
-						// @formatter:on
-						OpenAiApi.Usage usage = chatCompletion2.usage();
-						Usage currentChatResponseUsage = usage != null ? getDefaultUsage(usage) : new EmptyUsage();
-						Usage accumulatedUsage = UsageCalculator.getCumulativeUsage(currentChatResponseUsage,
-								previousChatResponse);
-						return new ChatResponse(generations, from(chatCompletion2, null, accumulatedUsage));
-					}
-					catch (Exception e) {
-						logger.error("Error processing chat completion", e);
-						return new ChatResponse(List.of());
-					}
-					// When in stream mode and enabled to include the usage, the OpenAI
-					// Chat completion response would have the usage set only in its
-					// final response. Hence, the following overlapping buffer is
-					// created to store both the current and the subsequent response
-					// to accumulate the usage from the subsequent response.
-				}))
-				.buffer(2, 1)
-				.map(bufferList -> {
-					ChatResponse firstResponse = bufferList.get(0);
-					// Raw passthrough forces stream_options.include_usage=true onto the
-					// wire body (applyOverrides), but the typed request has no
-					// streamOptions. Gate on rawBody too, else the final usage chunk is
-					// dropped and raw streams report empty token totals.
-					boolean includeUsage = rawBody != null
-							|| (request.streamOptions() != null && request.streamOptions().includeUsage());
-					if (includeUsage) {
-						if (bufferList.size() == 2) {
-							ChatResponse secondResponse = bufferList.get(1);
-							if (secondResponse != null && secondResponse.getMetadata() != null) {
-								// This is the usage from the final Chat response for a
-								// given Chat request.
-								Usage usage = secondResponse.getMetadata().getUsage();
-								if (!UsageCalculator.isEmpty(usage)) {
-									// Store the usage from the final response to the
-									// penultimate response for accumulation.
-									return new ChatResponse(firstResponse.getResults(),
-											from(firstResponse.getMetadata(), usage));
-								}
-							}
-						}
-					}
-					return firstResponse;
-				});
+			Flux<ChatResponse> chatResponse = mapChunksToChatResponses(completionChunks, request, rawBody != null,
+					previousChatResponse);
 
 			// @formatter:off
 			Flux<ChatResponse> flux = chatResponse.flatMap(response -> {
@@ -439,6 +375,150 @@ public class OpenAiChatModel implements ChatModel {
 			return new MessageAggregator().aggregate(flux, observationContext::setResponse);
 
 		});
+	}
+
+	/**
+	 * Raw-response passthrough (tee) variant of {@link #streamRaw(Prompt, String)}: from
+	 * a SINGLE provider HTTP stream it emits BOTH the raw provider SSE frames verbatim
+	 * (as {@link DualStreamItem.RawFrame}) for forwarding to the client AND the typed
+	 * parse (as {@link DualStreamItem.TypedChunk}) produced by the exact same pipeline
+	 * used by {@link #internalStream}, for usage/billing and audit. Only one HTTP request
+	 * is made: the source is shared via {@code publish().autoConnect(2)} so both branches
+	 * subscribe before upstream starts and no frame is lost. Tool execution is
+	 * intentionally NOT performed here (the caller disables internal tool execution in
+	 * raw mode).
+	 * @param prompt the prompt (used to resolve model/headers/overrides).
+	 * @param rawBody the raw JSON request body, forwarded verbatim after overrides.
+	 * @return a merged {@link Flux} of typed and raw items.
+	 */
+	public Flux<DualStreamItem> streamRawPassthrough(Prompt prompt, String rawBody) {
+		return Flux.deferContextual(contextView -> {
+			Prompt requestPrompt = buildRequestPrompt(prompt);
+			ChatCompletionRequest request = createRequest(requestPrompt, true);
+			String overridden = applyOverrides(rawBody, request);
+
+			final ChatModelObservationContext observationContext = ChatModelObservationContext.builder()
+				.prompt(requestPrompt)
+				.provider(OpenAiApiConstants.PROVIDER_NAME)
+				.build();
+
+			Observation observation = ChatModelObservationDocumentation.CHAT_MODEL_OPERATION.observation(
+					this.observationConvention, DEFAULT_OBSERVATION_CONVENTION, () -> observationContext,
+					this.observationRegistry);
+
+			observation.parentObservation(contextView.getOrDefault(ObservationThreadLocalAccessor.KEY, null)).start();
+
+			// Single HTTP request, shared to two subscribers so neither branch loses a
+			// frame. autoConnect(2) defers the upstream subscription until both the typed
+			// and raw branches have subscribed.
+			Flux<org.springframework.http.codec.ServerSentEvent<String>> connectable = this.openAiApi
+				.chatCompletionStreamRawSse(overridden, getAdditionalHttpHeaders(requestPrompt))
+				.publish()
+				.autoConnect(2);
+
+			// RAW branch: forward each SSE frame verbatim. For the OpenAI chat dialect
+			// there are no event names, so sse.event() is normally null.
+			Flux<DualStreamItem> rawItems = connectable
+				.map(sse -> new DualStreamItem.RawFrame(sse.event(), sse.data()));
+
+			// TYPED branch: run the identical chunk->ChatResponse + usage pipeline as the
+			// normal streaming path. rawBody is non-null here, so usage accumulation is
+			// gated on. No tool execution in raw mode.
+			Flux<OpenAiApi.ChatCompletionChunk> completionChunks = this.openAiApi.parseChatCompletionChunks(
+					connectable.map(org.springframework.http.codec.ServerSentEvent::data).filter(Objects::nonNull));
+			Flux<DualStreamItem> typedItems = mapChunksToChatResponses(completionChunks, request, true, null)
+				.map(DualStreamItem.TypedChunk::new);
+
+			return Flux.<DualStreamItem>merge(typedItems, rawItems)
+				.doOnError(observation::error)
+				.doFinally(s -> observation.stop())
+				.contextWrite(ctx -> ctx.put(ObservationThreadLocalAccessor.KEY, observation));
+		});
+	}
+
+	/**
+	 * Shared chunk-to-{@link ChatResponse} pipeline extracted verbatim from
+	 * {@link #internalStream} so the typed branch of {@link #streamRawPassthrough} runs
+	 * the identical logic (role mapping, generation building, and the overlapping
+	 * {@code buffer(2, 1)} usage accumulation). Behavior of {@code internalStream} is
+	 * unchanged.
+	 * @param completionChunks the source chunks.
+	 * @param request the typed request (for generation building and the usage gate).
+	 * @param rawBody whether this is a raw passthrough call (forces the usage gate on).
+	 * @param previousChatResponse the previous response for cumulative usage, or null.
+	 * @return a {@link Flux} of {@link ChatResponse}.
+	 */
+	private Flux<ChatResponse> mapChunksToChatResponses(Flux<OpenAiApi.ChatCompletionChunk> completionChunks,
+			ChatCompletionRequest request, boolean rawBody, ChatResponse previousChatResponse) {
+
+		// For chunked responses, only the first chunk contains the choice role.
+		// The rest of the chunks with same ID share the same role.
+		ConcurrentHashMap<String, String> roleMap = new ConcurrentHashMap<>();
+
+		// @formatter:off
+		return completionChunks.map(this::chunkToChatCompletion)
+			.switchMap(chatCompletion -> Mono.just(chatCompletion).map(chatCompletion2 -> {
+				try {
+					// If an id is not provided, set to "NO_ID" (for compatible APIs).
+					String id = chatCompletion2.id() == null ? "NO_ID" : chatCompletion2.id();
+
+					List<Generation> generations = chatCompletion2.choices().stream().map(choice -> {
+						if (choice.message().role() != null) {
+							roleMap.putIfAbsent(id, choice.message().role().name());
+						}
+						Map<String, Object> metadata = Map.of(
+								"id", id,
+								"role", roleMap.getOrDefault(id, ""),
+								"index", choice.index() != null ? choice.index() : 0,
+								"finishReason", getFinishReasonJson(choice.finishReason()),
+								"refusal", StringUtils.hasText(choice.message().refusal()) ? choice.message().refusal() : "",
+								"annotations", choice.message().annotations() != null ? choice.message().annotations() : List.of());
+						return buildGeneration(choice, metadata, request);
+					}).toList();
+					OpenAiApi.Usage usage = chatCompletion2.usage();
+					Usage currentChatResponseUsage = usage != null ? getDefaultUsage(usage) : new EmptyUsage();
+					Usage accumulatedUsage = UsageCalculator.getCumulativeUsage(currentChatResponseUsage,
+							previousChatResponse);
+					return new ChatResponse(generations, from(chatCompletion2, null, accumulatedUsage));
+				}
+				catch (Exception e) {
+					logger.error("Error processing chat completion", e);
+					return new ChatResponse(List.of());
+				}
+				// When in stream mode and enabled to include the usage, the OpenAI
+				// Chat completion response would have the usage set only in its
+				// final response. Hence, the following overlapping buffer is
+				// created to store both the current and the subsequent response
+				// to accumulate the usage from the subsequent response.
+			}))
+			.buffer(2, 1)
+			.map(bufferList -> {
+				ChatResponse firstResponse = bufferList.get(0);
+				// Raw passthrough forces stream_options.include_usage=true onto the
+				// wire body (applyOverrides), but the typed request has no
+				// streamOptions. Gate on rawBody too, else the final usage chunk is
+				// dropped and raw streams report empty token totals.
+				boolean includeUsage = rawBody
+						|| (request.streamOptions() != null && request.streamOptions().includeUsage());
+				if (includeUsage) {
+					if (bufferList.size() == 2) {
+						ChatResponse secondResponse = bufferList.get(1);
+						if (secondResponse != null && secondResponse.getMetadata() != null) {
+							// This is the usage from the final Chat response for a
+							// given request.
+							Usage usage = secondResponse.getMetadata().getUsage();
+							if (!UsageCalculator.isEmpty(usage)) {
+								// Store the usage from the final response to the
+								// penultimate response for accumulation.
+								return new ChatResponse(firstResponse.getResults(),
+										from(firstResponse.getMetadata(), usage));
+							}
+						}
+					}
+				}
+				return firstResponse;
+			});
+		// @formatter:on
 	}
 
 	private MultiValueMap<String, String> getAdditionalHttpHeaders(Prompt prompt) {

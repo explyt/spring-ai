@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -65,6 +66,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.model.MessageAggregator;
+import org.springframework.ai.chat.model.DualStreamItem;
 import org.springframework.ai.chat.observation.ChatModelObservationContext;
 import org.springframework.ai.chat.observation.ChatModelObservationConvention;
 import org.springframework.ai.chat.observation.ChatModelObservationDocumentation;
@@ -362,6 +364,75 @@ public class AnthropicChatModel implements ChatModel {
 			// @formatter:on
 
 			return new MessageAggregator().aggregate(chatResponseFlux, observationContext::setResponse);
+		});
+	}
+
+	/**
+	 * Raw-response passthrough (tee) variant of {@link #streamRaw(Prompt, String)}: from
+	 * a SINGLE provider HTTP stream it emits BOTH the raw provider SSE frames verbatim
+	 * (as {@link DualStreamItem.RawFrame}, preserving Anthropic {@code event:} names such
+	 * as {@code message_start}, {@code ping}, {@code content_block_delta},
+	 * {@code message_delta} and {@code error}) for forwarding to the client, AND the
+	 * typed parse (as {@link DualStreamItem.TypedChunk}) produced by the exact same
+	 * pipeline used by {@link #internalStream}, for usage/billing and audit. Only one
+	 * HTTP request is made: the source is shared via {@code publish().autoConnect(2)} so
+	 * both branches subscribe before upstream starts and no frame is lost. Tool execution
+	 * is intentionally NOT performed here (the caller disables internal tool execution in
+	 * raw mode). Pings and {@code error} events are NOT filtered from the raw branch.
+	 * @param prompt the prompt (used to resolve model/headers/overrides).
+	 * @param rawBody the raw JSON request body, forwarded verbatim after overrides.
+	 * @return a merged {@link Flux} of typed and raw items.
+	 */
+	public Flux<DualStreamItem> streamRawPassthrough(Prompt prompt, String rawBody) {
+		return Flux.deferContextual(contextView -> {
+			Prompt requestPrompt = buildRequestPrompt(prompt);
+			ChatCompletionRequest request = createRequest(requestPrompt, true);
+			String overridden = applyOverrides(rawBody, request);
+
+			ChatModelObservationContext observationContext = ChatModelObservationContext.builder()
+				.prompt(requestPrompt)
+				.provider(AnthropicApi.PROVIDER_NAME)
+				.build();
+
+			Observation observation = ChatModelObservationDocumentation.CHAT_MODEL_OPERATION.observation(
+					this.observationConvention, DEFAULT_OBSERVATION_CONVENTION, () -> observationContext,
+					this.observationRegistry);
+
+			// Single HTTP request, shared to two subscribers so neither branch loses a
+			// frame. autoConnect(2) defers the upstream subscription until both the typed
+			// and raw branches have subscribed. Build the (lazy) source before
+			// starting the observation so a synchronous applyOverrides failure cannot
+			// leak
+			// a started observation.
+			Flux<org.springframework.http.codec.ServerSentEvent<String>> connectable = this.anthropicApi
+				.chatCompletionStreamRawSse(overridden, this.getAdditionalHttpHeaders(requestPrompt))
+				.publish()
+				.autoConnect(2);
+
+			observation.parentObservation(contextView.getOrDefault(ObservationThreadLocalAccessor.KEY, null)).start();
+
+			// RAW branch: forward each SSE frame verbatim, preserving the Anthropic
+			// event: name. Do NOT filter ping or error frames.
+			Flux<DualStreamItem> rawItems = connectable
+				.map(sse -> new DualStreamItem.RawFrame(sse.event(), sse.data()));
+
+			// TYPED branch: run the identical parse + usage pipeline as the normal
+			// streaming path (no tool execution in raw mode, no previous response).
+			Flux<ChatCompletionResponse> response = this.anthropicApi.parseChatCompletionStream(
+					connectable.map(org.springframework.http.codec.ServerSentEvent::data).filter(Objects::nonNull));
+			Flux<DualStreamItem> typedItems = response.map(chatCompletionResponse -> {
+				AnthropicApi.Usage usage = chatCompletionResponse.usage();
+				Usage currentChatResponseUsage = usage != null ? this.getDefaultUsage(chatCompletionResponse.usage())
+						: new EmptyUsage();
+				Usage accumulatedUsage = UsageCalculator.getCumulativeUsage(currentChatResponseUsage, null);
+				ChatResponse chatResponse = toChatResponse(chatCompletionResponse, accumulatedUsage);
+				return (DualStreamItem) new DualStreamItem.TypedChunk(chatResponse);
+			});
+
+			return Flux.merge(typedItems, rawItems)
+				.doOnError(observation::error)
+				.doFinally(s -> observation.stop())
+				.contextWrite(ctx -> ctx.put(ObservationThreadLocalAccessor.KEY, observation));
 		});
 	}
 

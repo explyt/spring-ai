@@ -48,6 +48,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.LinkedMultiValueMap;
@@ -340,7 +341,37 @@ public class OpenAiApi {
 		Assert.notNull(rawBody, REQUEST_BODY_NULL_MESSAGE);
 		Assert.notNull(additionalHttpHeader, ADDITIONAL_HEADERS_NULL_MESSAGE);
 
-		AtomicBoolean isInsideTool = new AtomicBoolean(false);
+		// @formatter:off
+		Flux<String> sseData = this.webClient.post()
+			.uri(this.completionsPath)
+			.headers(headers -> {
+				addHeadersIfMissing(headers, additionalHttpHeader);
+				addDefaultHeadersIfMissing(headers);
+			}) // @formatter:on
+			.bodyValue(rawBody)
+			.retrieve()
+			.bodyToFlux(String.class);
+
+		return parseChatCompletionChunks(sseData);
+	}
+
+	/**
+	 * Raw-SSE source for the raw-response passthrough (tee) path. Performs the exact same
+	 * POST and header handling as {@link #chatCompletionStreamRaw}, but reads the
+	 * response body as {@link ServerSentEvent} frames WITHOUT filtering the
+	 * {@code [DONE]} sentinel and WITHOUT parsing. This preserves each SSE frame verbatim
+	 * (including the final usage frame and {@code [DONE]}) so it can be forwarded to the
+	 * client unchanged.
+	 * @param rawBody the raw JSON request body, sent as-is.
+	 * @param additionalHttpHeader Optional, additional HTTP headers added only when
+	 * absent.
+	 * @return a {@link Flux} of raw {@link ServerSentEvent} frames.
+	 */
+	public Flux<ServerSentEvent<String>> chatCompletionStreamRawSse(String rawBody,
+			MultiValueMap<String, String> additionalHttpHeader) {
+
+		Assert.notNull(rawBody, REQUEST_BODY_NULL_MESSAGE);
+		Assert.notNull(additionalHttpHeader, ADDITIONAL_HEADERS_NULL_MESSAGE);
 
 		// @formatter:off
 		return this.webClient.post()
@@ -351,7 +382,25 @@ public class OpenAiApi {
 			}) // @formatter:on
 			.bodyValue(rawBody)
 			.retrieve()
-			.bodyToFlux(String.class)
+			.bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
+			});
+	}
+
+	/**
+	 * Shared SSE parsing pipeline for the raw and passthrough streaming paths: filters
+	 * the {@code [DONE]} sentinel, parses each frame into a {@link ChatCompletionChunk},
+	 * and merges tool-call chunk windows. Extracted verbatim from the inline pipeline of
+	 * {@link #chatCompletionStreamRaw} so the passthrough typed branch runs the identical
+	 * logic.
+	 * @param sseData the raw SSE {@code data:} payloads.
+	 * @return a {@link Flux} stream from chat completion chunks.
+	 */
+	public Flux<ChatCompletionChunk> parseChatCompletionChunks(Flux<String> sseData) {
+
+		AtomicBoolean isInsideTool = new AtomicBoolean(false);
+
+		// @formatter:off
+		return sseData
 			// Do NOT takeUntil("[DONE]"): cancelling on the sentinel closes the
 			// connection before the body is drained, defeating the connection reuse
 			// the typed chatCompletionStream above relies on, and making the gateway
@@ -386,6 +435,7 @@ public class OpenAiApi {
 			})
 			// Flux<Mono<ChatCompletionChunk>> -> Flux<ChatCompletionChunk>
 			.flatMap(mono -> mono);
+		// @formatter:on
 	}
 
 	/**

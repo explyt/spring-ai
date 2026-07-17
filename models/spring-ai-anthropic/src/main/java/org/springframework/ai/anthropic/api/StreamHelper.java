@@ -169,8 +169,12 @@ public class StreamHelper {
 				contentBlockReference.get().withType(event.type().name()).withContent(List.of(cb));
 			}
 			else {
-				throw new IllegalArgumentException(
-						"Unsupported content block type: " + contentBlockStartEvent.contentBlock().type());
+				// Unknown block type (e.g. server-side tools like web_search:
+				// server_tool_use / web_search_tool_result). Do not abort the stream —
+				// emit an empty chunk; the raw passthrough carries the verbatim payload.
+				logger.warn("Skipping unsupported content block type: {}",
+						contentBlockStartEvent.contentBlock().type());
+				contentBlockReference.get().withType(event.type().name()).withContent(List.of());
 			}
 		}
 		else if (event.type().equals(EventType.CONTENT_BLOCK_DELTA)) {
@@ -191,8 +195,11 @@ public class StreamHelper {
 				contentBlockReference.get().withType(event.type().name()).withContent(List.of(cb));
 			}
 			else {
-				throw new IllegalArgumentException(
-						"Unsupported content block delta type: " + contentBlockDeltaEvent.delta().type());
+				// Unknown delta type (e.g. citations_delta from server-side web_search).
+				// Do not abort the stream — emit an empty chunk; the raw passthrough
+				// carries the verbatim payload.
+				logger.warn("Skipping unsupported content block delta type: {}", contentBlockDeltaEvent.delta().type());
+				contentBlockReference.get().withType(event.type().name()).withContent(List.of());
 			}
 		}
 		else if (event.type().equals(EventType.MESSAGE_DELTA)) {
