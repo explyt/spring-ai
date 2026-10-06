@@ -72,6 +72,7 @@ import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.ChatCom
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.MediaContent;
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.ToolCall;
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionRequest;
+import org.springframework.ai.openai.api.OpenAiResponsesStreamAdapter;
 import org.springframework.ai.openai.api.common.OpenAiApiConstants;
 import org.springframework.ai.openai.metadata.support.OpenAiResponseHeaderExtractor;
 import org.springframework.ai.retry.RetryUtils;
@@ -437,6 +438,66 @@ public class OpenAiChatModel implements ChatModel {
 	}
 
 	/**
+	 * Responses API variant of {@link #streamRawPassthrough(Prompt, String)}: forwards a
+	 * raw <b>Responses</b> request body ({@code input}, {@code instructions}, ...)
+	 * verbatim to the provider's Responses endpoint (with {@code model}/{@code stream}
+	 * overridden and {@code store} forced to {@code false}) and emits, from that single
+	 * HTTP stream, BOTH the raw Responses SSE frames (event name preserved) as
+	 * {@link DualStreamItem.RawFrame} AND the typed parse as
+	 * {@link DualStreamItem.TypedChunk}. The typed branch adapts the Responses events to
+	 * Chat Completions chunks ({@link OpenAiResponsesStreamAdapter}) and then runs the
+	 * identical pipeline as {@link #internalStream}, so usage/billing and audit behave
+	 * exactly as on the Chat Completions dialect. Tool execution is intentionally NOT
+	 * performed here.
+	 * @param prompt the prompt (used to resolve model/headers/overrides).
+	 * @param rawBody the raw JSON Responses request body, forwarded verbatim after
+	 * overrides.
+	 * @return a merged {@link Flux} of typed and raw items.
+	 */
+	public Flux<DualStreamItem> streamRawPassthroughResponses(Prompt prompt, String rawBody) {
+		return Flux.deferContextual(contextView -> {
+			Prompt requestPrompt = buildRequestPrompt(prompt);
+			ChatCompletionRequest request = createRequest(requestPrompt, true);
+			String overridden = applyResponsesOverrides(rawBody, request);
+
+			final ChatModelObservationContext observationContext = ChatModelObservationContext.builder()
+				.prompt(requestPrompt)
+				.provider(OpenAiApiConstants.PROVIDER_NAME)
+				.build();
+
+			Observation observation = ChatModelObservationDocumentation.CHAT_MODEL_OPERATION.observation(
+					this.observationConvention, DEFAULT_OBSERVATION_CONVENTION, () -> observationContext,
+					this.observationRegistry);
+
+			observation.parentObservation(contextView.getOrDefault(ObservationThreadLocalAccessor.KEY, null)).start();
+
+			// Single HTTP request shared by the raw and typed branches (see
+			// streamRawPassthrough).
+			Flux<org.springframework.http.codec.ServerSentEvent<String>> connectable = this.openAiApi
+				.responsesStreamRawSse(overridden, getAdditionalHttpHeaders(requestPrompt))
+				.publish()
+				.autoConnect(2);
+
+			// RAW branch: forward each SSE frame verbatim, preserving the Responses
+			// event: name (response.created, response.output_text.delta, ...).
+			Flux<DualStreamItem> rawItems = connectable
+				.map(sse -> new DualStreamItem.RawFrame(sse.event(), sse.data()));
+
+			// TYPED branch: Responses events -> Chat Completions chunks -> the identical
+			// chunk->ChatResponse + usage pipeline as the normal streaming path.
+			Flux<OpenAiApi.ChatCompletionChunk> completionChunks = OpenAiResponsesStreamAdapter.toChatCompletionChunks(
+					connectable.map(org.springframework.http.codec.ServerSentEvent::data).filter(Objects::nonNull));
+			Flux<DualStreamItem> typedItems = mapChunksToChatResponses(completionChunks, request, true, null)
+				.map(DualStreamItem.TypedChunk::new);
+
+			return Flux.<DualStreamItem>merge(typedItems, rawItems)
+				.doOnError(observation::error)
+				.doFinally(s -> observation.stop())
+				.contextWrite(ctx -> ctx.put(ObservationThreadLocalAccessor.KEY, observation));
+		});
+	}
+
+	/**
 	 * Shared chunk-to-{@link ChatResponse} pipeline extracted verbatim from
 	 * {@link #internalStream} so the typed branch of {@link #streamRawPassthrough} runs
 	 * the identical logic (role mapping, generation building, and the overlapping
@@ -559,6 +620,34 @@ public class OpenAiChatModel implements ChatModel {
 		}
 		catch (JsonProcessingException e) {
 			throw new IllegalArgumentException("Failed to apply overrides to raw passthrough request body", e);
+		}
+	}
+
+	/**
+	 * Responses API counterpart of
+	 * {@link #applyOverrides(String, ChatCompletionRequest)}: sets the resolved provider
+	 * {@code model} and the actual transport {@code stream} flag, and forces
+	 * {@code store=false} so the provider never retains conversation state under the
+	 * gateway's credential (the gateway is stateless; clients must send the full
+	 * {@code input} every turn). The Responses API has no
+	 * {@code stream_options.include_usage}: usage always arrives in
+	 * {@code response.completed}, so nothing else is touched.
+	 */
+	private String applyResponsesOverrides(String rawBody, ChatCompletionRequest request) {
+		try {
+			JsonNode tree = ModelOptionsUtils.OBJECT_MAPPER.readTree(rawBody);
+			if (!(tree instanceof ObjectNode root)) {
+				throw new IllegalArgumentException("Raw passthrough request body must be a JSON object");
+			}
+			if (request.model() != null) {
+				root.put("model", request.model());
+			}
+			root.put("stream", Boolean.TRUE.equals(request.stream()));
+			root.put("store", false);
+			return ModelOptionsUtils.OBJECT_MAPPER.writeValueAsString(root);
+		}
+		catch (JsonProcessingException e) {
+			throw new IllegalArgumentException("Failed to apply overrides to raw Responses request body", e);
 		}
 	}
 

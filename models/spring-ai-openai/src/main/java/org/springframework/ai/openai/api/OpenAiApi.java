@@ -100,6 +100,9 @@ public class OpenAiApi {
 
 	private static final String ADDITIONAL_HEADERS_NULL_MESSAGE = "The additional HTTP headers can not be null.";
 
+	/** Default path of the OpenAI Responses API endpoint. */
+	public static final String DEFAULT_RESPONSES_PATH = "/v1/responses";
+
 	// Store config fields for mutate/copy
 	private final String baseUrl;
 
@@ -110,6 +113,8 @@ public class OpenAiApi {
 	private final String completionsPath;
 
 	private final String embeddingsPath;
+
+	private final String responsesPath;
 
 	private final ResponseErrorHandler responseErrorHandler;
 
@@ -142,15 +147,36 @@ public class OpenAiApi {
 	public OpenAiApi(String baseUrl, ApiKey apiKey, MultiValueMap<String, String> headers, String completionsPath,
 			String embeddingsPath, RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder,
 			ResponseErrorHandler responseErrorHandler) {
+		this(baseUrl, apiKey, headers, completionsPath, embeddingsPath, DEFAULT_RESPONSES_PATH, restClientBuilder,
+				webClientBuilder, responseErrorHandler);
+	}
+
+	/**
+	 * Create a new chat completion api.
+	 * @param baseUrl api base URL.
+	 * @param apiKey OpenAI apiKey.
+	 * @param headers the http headers to use.
+	 * @param completionsPath the path to the chat completions endpoint.
+	 * @param embeddingsPath the path to the embeddings endpoint.
+	 * @param responsesPath the path to the Responses API endpoint (raw passthrough only).
+	 * @param restClientBuilder RestClient builder.
+	 * @param webClientBuilder WebClient builder.
+	 * @param responseErrorHandler Response error handler.
+	 */
+	public OpenAiApi(String baseUrl, ApiKey apiKey, MultiValueMap<String, String> headers, String completionsPath,
+			String embeddingsPath, String responsesPath, RestClient.Builder restClientBuilder,
+			WebClient.Builder webClientBuilder, ResponseErrorHandler responseErrorHandler) {
 		this.baseUrl = baseUrl;
 		this.apiKey = apiKey;
 		this.headers = headers;
 		this.completionsPath = completionsPath;
 		this.embeddingsPath = embeddingsPath;
+		this.responsesPath = responsesPath;
 		this.responseErrorHandler = responseErrorHandler;
 
 		Assert.hasText(completionsPath, "Completions Path must not be null");
 		Assert.hasText(embeddingsPath, "Embeddings Path must not be null");
+		Assert.hasText(responsesPath, "Responses Path must not be null");
 		Assert.notNull(headers, "Headers must not be null");
 
 		// @formatter:off
@@ -387,6 +413,39 @@ public class OpenAiApi {
 	}
 
 	/**
+	 * Raw-SSE source for the Responses API raw passthrough path: POSTs the raw,
+	 * pre-serialized Responses request body verbatim to the Responses endpoint
+	 * ({@link #DEFAULT_RESPONSES_PATH} by default) and reads the response as
+	 * {@link ServerSentEvent} frames WITHOUT parsing, preserving the Responses
+	 * {@code event:} names ({@code response.created}, {@code response.output_text.delta},
+	 * {@code response.completed}, ...) so each frame can be forwarded to the client
+	 * unchanged. Header handling is identical to {@link #chatCompletionStreamRawSse}.
+	 * @param rawBody the raw JSON Responses request body, sent as-is. Must have the
+	 * stream property set to true.
+	 * @param additionalHttpHeader Optional, additional HTTP headers added only when
+	 * absent.
+	 * @return a {@link Flux} of raw {@link ServerSentEvent} frames.
+	 */
+	public Flux<ServerSentEvent<String>> responsesStreamRawSse(String rawBody,
+			MultiValueMap<String, String> additionalHttpHeader) {
+
+		Assert.notNull(rawBody, REQUEST_BODY_NULL_MESSAGE);
+		Assert.notNull(additionalHttpHeader, ADDITIONAL_HEADERS_NULL_MESSAGE);
+
+		// @formatter:off
+		return this.webClient.post()
+			.uri(this.responsesPath)
+			.headers(headers -> {
+				addHeadersIfMissing(headers, additionalHttpHeader);
+				addDefaultHeadersIfMissing(headers);
+			}) // @formatter:on
+			.bodyValue(rawBody)
+			.retrieve()
+			.bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
+			});
+	}
+
+	/**
 	 * Shared SSE parsing pipeline for the raw and passthrough streaming paths: filters
 	 * the {@code [DONE]} sentinel, parses each frame into a {@link ChatCompletionChunk},
 	 * and merges tool-call chunk windows. Extracted verbatim from the inline pipeline of
@@ -518,6 +577,10 @@ public class OpenAiApi {
 
 	String getEmbeddingsPath() {
 		return this.embeddingsPath;
+	}
+
+	String getResponsesPath() {
+		return this.responsesPath;
 	}
 
 	ResponseErrorHandler getResponseErrorHandler() {
@@ -2228,6 +2291,7 @@ public class OpenAiApi {
 			this.headers = new LinkedMultiValueMap<>(api.getHeaders());
 			this.completionsPath = api.getCompletionsPath();
 			this.embeddingsPath = api.getEmbeddingsPath();
+			this.responsesPath = api.getResponsesPath();
 			this.restClientBuilder = api.restClient != null ? api.restClient.mutate() : RestClient.builder();
 			this.webClientBuilder = api.webClient != null ? api.webClient.mutate() : WebClient.builder();
 			this.responseErrorHandler = api.getResponseErrorHandler();
@@ -2242,6 +2306,8 @@ public class OpenAiApi {
 		private String completionsPath = "/v1/chat/completions";
 
 		private String embeddingsPath = "/v1/embeddings";
+
+		private String responsesPath = DEFAULT_RESPONSES_PATH;
 
 		private RestClient.Builder restClientBuilder = RestClient.builder();
 
@@ -2284,6 +2350,12 @@ public class OpenAiApi {
 			return this;
 		}
 
+		public Builder responsesPath(String responsesPath) {
+			Assert.hasText(responsesPath, "responsesPath cannot be null or empty");
+			this.responsesPath = responsesPath;
+			return this;
+		}
+
 		public Builder restClientBuilder(RestClient.Builder restClientBuilder) {
 			Assert.notNull(restClientBuilder, "restClientBuilder cannot be null");
 			this.restClientBuilder = restClientBuilder;
@@ -2305,7 +2377,7 @@ public class OpenAiApi {
 		public OpenAiApi build() {
 			Assert.notNull(this.apiKey, "apiKey must be set");
 			return new OpenAiApi(this.baseUrl, this.apiKey, this.headers, this.completionsPath, this.embeddingsPath,
-					this.restClientBuilder, this.webClientBuilder, this.responseErrorHandler);
+					this.responsesPath, this.restClientBuilder, this.webClientBuilder, this.responseErrorHandler);
 		}
 
 	}
