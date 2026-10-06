@@ -18,6 +18,8 @@ package org.springframework.ai.openai;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -393,48 +395,9 @@ public class OpenAiChatModel implements ChatModel {
 	 * @return a merged {@link Flux} of typed and raw items.
 	 */
 	public Flux<DualStreamItem> streamRawPassthrough(Prompt prompt, String rawBody) {
-		return Flux.deferContextual(contextView -> {
-			Prompt requestPrompt = buildRequestPrompt(prompt);
-			ChatCompletionRequest request = createRequest(requestPrompt, true);
-			String overridden = applyOverrides(rawBody, request);
-
-			final ChatModelObservationContext observationContext = ChatModelObservationContext.builder()
-				.prompt(requestPrompt)
-				.provider(OpenAiApiConstants.PROVIDER_NAME)
-				.build();
-
-			Observation observation = ChatModelObservationDocumentation.CHAT_MODEL_OPERATION.observation(
-					this.observationConvention, DEFAULT_OBSERVATION_CONVENTION, () -> observationContext,
-					this.observationRegistry);
-
-			observation.parentObservation(contextView.getOrDefault(ObservationThreadLocalAccessor.KEY, null)).start();
-
-			// Single HTTP request, shared to two subscribers so neither branch loses a
-			// frame. autoConnect(2) defers the upstream subscription until both the typed
-			// and raw branches have subscribed.
-			Flux<org.springframework.http.codec.ServerSentEvent<String>> connectable = this.openAiApi
-				.chatCompletionStreamRawSse(overridden, getAdditionalHttpHeaders(requestPrompt))
-				.publish()
-				.autoConnect(2);
-
-			// RAW branch: forward each SSE frame verbatim. For the OpenAI chat dialect
-			// there are no event names, so sse.event() is normally null.
-			Flux<DualStreamItem> rawItems = connectable
-				.map(sse -> new DualStreamItem.RawFrame(sse.event(), sse.data()));
-
-			// TYPED branch: run the identical chunk->ChatResponse + usage pipeline as the
-			// normal streaming path. rawBody is non-null here, so usage accumulation is
-			// gated on. No tool execution in raw mode.
-			Flux<OpenAiApi.ChatCompletionChunk> completionChunks = this.openAiApi.parseChatCompletionChunks(
-					connectable.map(org.springframework.http.codec.ServerSentEvent::data).filter(Objects::nonNull));
-			Flux<DualStreamItem> typedItems = mapChunksToChatResponses(completionChunks, request, true, null)
-				.map(DualStreamItem.TypedChunk::new);
-
-			return Flux.<DualStreamItem>merge(typedItems, rawItems)
-				.doOnError(observation::error)
-				.doFinally(s -> observation.stop())
-				.contextWrite(ctx -> ctx.put(ObservationThreadLocalAccessor.KEY, observation));
-		});
+		return teeRawStream(prompt, request -> applyOverrides(rawBody, request),
+				(overridden, headers) -> this.openAiApi.chatCompletionStreamRawSse(overridden, headers),
+				this.openAiApi::parseChatCompletionChunks);
 	}
 
 	/**
@@ -455,10 +418,30 @@ public class OpenAiChatModel implements ChatModel {
 	 * @return a merged {@link Flux} of typed and raw items.
 	 */
 	public Flux<DualStreamItem> streamRawPassthroughResponses(Prompt prompt, String rawBody) {
+		return teeRawStream(prompt, request -> applyResponsesOverrides(rawBody, request),
+				(overridden, headers) -> this.openAiApi.responsesStreamRawSse(overridden, headers),
+				OpenAiResponsesStreamAdapter::toChatCompletionChunks);
+	}
+
+	/**
+	 * Shared tee for the raw passthrough dialects: one provider HTTP stream, shared via
+	 * {@code publish().autoConnect(2)} so the RAW branch (verbatim frames, event name
+	 * preserved) and the TYPED branch ({@code parser} then
+	 * {@link #mapChunksToChatResponses}) both subscribe before upstream starts and no
+	 * frame is lost. The source is built BEFORE the observation starts so a synchronous
+	 * override failure cannot leak a started observation.
+	 * @param prompt the prompt (used to resolve model/headers/overrides).
+	 * @param override applies the gateway-owned overrides to the raw body.
+	 * @param source performs the POST for the overridden body and the resolved headers.
+	 * @param parser turns the SSE {@code data:} payloads into Chat Completions chunks.
+	 */
+	private Flux<DualStreamItem> teeRawStream(Prompt prompt, Function<ChatCompletionRequest, String> override,
+			BiFunction<String, MultiValueMap<String, String>, Flux<org.springframework.http.codec.ServerSentEvent<String>>> source,
+			Function<Flux<String>, Flux<OpenAiApi.ChatCompletionChunk>> parser) {
 		return Flux.deferContextual(contextView -> {
 			Prompt requestPrompt = buildRequestPrompt(prompt);
 			ChatCompletionRequest request = createRequest(requestPrompt, true);
-			String overridden = applyResponsesOverrides(rawBody, request);
+			String overridden = override.apply(request);
 
 			final ChatModelObservationContext observationContext = ChatModelObservationContext.builder()
 				.prompt(requestPrompt)
@@ -469,24 +452,26 @@ public class OpenAiChatModel implements ChatModel {
 					this.observationConvention, DEFAULT_OBSERVATION_CONVENTION, () -> observationContext,
 					this.observationRegistry);
 
-			observation.parentObservation(contextView.getOrDefault(ObservationThreadLocalAccessor.KEY, null)).start();
-
-			// Single HTTP request shared by the raw and typed branches (see
-			// streamRawPassthrough).
-			Flux<org.springframework.http.codec.ServerSentEvent<String>> connectable = this.openAiApi
-				.responsesStreamRawSse(overridden, getAdditionalHttpHeaders(requestPrompt))
+			// Single HTTP request, shared to two subscribers so neither branch loses a
+			// frame. autoConnect(2) defers the upstream subscription until both the typed
+			// and raw branches have subscribed.
+			Flux<org.springframework.http.codec.ServerSentEvent<String>> connectable = source
+				.apply(overridden, getAdditionalHttpHeaders(requestPrompt))
 				.publish()
 				.autoConnect(2);
 
-			// RAW branch: forward each SSE frame verbatim, preserving the Responses
-			// event: name (response.created, response.output_text.delta, ...).
+			observation.parentObservation(contextView.getOrDefault(ObservationThreadLocalAccessor.KEY, null)).start();
+
+			// RAW branch: forward each SSE frame verbatim. Chat Completions frames have
+			// no event name (null); Responses frames keep theirs.
 			Flux<DualStreamItem> rawItems = connectable
 				.map(sse -> new DualStreamItem.RawFrame(sse.event(), sse.data()));
 
-			// TYPED branch: Responses events -> Chat Completions chunks -> the identical
-			// chunk->ChatResponse + usage pipeline as the normal streaming path.
-			Flux<OpenAiApi.ChatCompletionChunk> completionChunks = OpenAiResponsesStreamAdapter.toChatCompletionChunks(
-					connectable.map(org.springframework.http.codec.ServerSentEvent::data).filter(Objects::nonNull));
+			// TYPED branch: dialect parser -> the identical chunk->ChatResponse + usage
+			// pipeline as the normal streaming path. rawBody is non-null here, so usage
+			// accumulation is gated on. No tool execution in raw mode.
+			Flux<OpenAiApi.ChatCompletionChunk> completionChunks = parser
+				.apply(connectable.map(org.springframework.http.codec.ServerSentEvent::data).filter(Objects::nonNull));
 			Flux<DualStreamItem> typedItems = mapChunksToChatResponses(completionChunks, request, true, null)
 				.map(DualStreamItem.TypedChunk::new);
 

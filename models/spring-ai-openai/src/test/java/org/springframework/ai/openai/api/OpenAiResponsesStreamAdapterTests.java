@@ -155,6 +155,30 @@ class OpenAiResponsesStreamAdapterTests {
 	}
 
 	@Test
+	void refusalAndRawReasoningTextDeltasAreMapped() {
+		List<ChatCompletionChunk> chunks = adapt(CREATED,
+				"{\"type\":\"response.refusal.delta\",\"sequence_number\":2,\"delta\":\"I cannot\"}",
+				"{\"type\":\"response.reasoning_text.delta\",\"sequence_number\":3,\"delta\":\"raw cot\"}");
+
+		assertThat(chunks).hasSize(2);
+		assertThat(chunks.get(0).choices().get(0).delta().refusal()).isEqualTo("I cannot");
+		assertThat(chunks.get(0).choices().get(0).delta().content()).isNull();
+		assertThat(chunks.get(1).choices().get(0).delta().getReasoningContent()).isEqualTo("raw cot");
+	}
+
+	@Test
+	void incompleteContentFilterFinishesWithContentFilter() {
+		String incomplete = "{\"type\":\"response.incomplete\",\"sequence_number\":9,"
+				+ "\"response\":{\"id\":\"resp_1\",\"model\":\"gpt-test\",\"status\":\"incomplete\","
+				+ "\"incomplete_details\":{\"reason\":\"content_filter\"}}}";
+		List<ChatCompletionChunk> chunks = adapt(CREATED, TEXT_DELTA_1, incomplete);
+
+		// No usage object on this terminal: finish chunk only, no usage chunk.
+		assertThat(chunks).hasSize(2);
+		assertThat(chunks.get(1).choices().get(0).finishReason()).isEqualTo(ChatCompletionFinishReason.CONTENT_FILTER);
+	}
+
+	@Test
 	void failedAndUnknownEventsAndDoneSentinelProduceNothing() {
 		List<ChatCompletionChunk> chunks = adapt(CREATED, "{\"type\":\"response.some_future_event\"}",
 				"{\"type\":\"error\",\"code\":\"rate_limit\",\"message\":\"slow down\"}", FAILED, "not json", "[DONE]");
