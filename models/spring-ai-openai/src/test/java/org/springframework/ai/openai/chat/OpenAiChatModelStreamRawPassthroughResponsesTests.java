@@ -143,6 +143,15 @@ public class OpenAiChatModelStreamRawPassthroughResponsesTests {
 	}
 
 	@Test
+	void makesExactlyOneHttpRequest() {
+		setupChatModel(happyStream());
+
+		this.chatModel.streamRawPassthroughResponses(new Prompt("test"), "{\"input\":\"hi\"}").collectList().block();
+
+		verify(this.apiSpy, times(1)).responsesStreamRawSse(anyString(), any());
+	}
+
+	@Test
 	void appliesModelStreamAndStoreOverridesAndKeepsEverythingElse() throws Exception {
 		setupChatModel(happyStream());
 
