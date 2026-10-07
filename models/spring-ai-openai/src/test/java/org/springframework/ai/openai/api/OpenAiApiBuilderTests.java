@@ -161,15 +161,37 @@ public class OpenAiApiBuilderTests {
 	}
 
 	@Test
+	void testInvalidResponsesPath() {
+		assertThatThrownBy(() -> OpenAiApi.builder().responsesPath("").build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("responsesPath cannot be null or empty");
+
+		assertThatThrownBy(() -> OpenAiApi.builder().responsesPath(null).build())
+			.isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("responsesPath cannot be null or empty");
+	}
+
+	@Test
 	void testBuilderWithAllCustomPaths() {
 		OpenAiApi api = OpenAiApi.builder()
 			.apiKey(TEST_API_KEY)
 			.baseUrl(TEST_BASE_URL)
 			.completionsPath("/custom/completions")
 			.embeddingsPath("/custom/embeddings")
+			.responsesPath("/custom/responses")
 			.build();
 
 		assertThat(api).isNotNull();
+		assertThat(api.getResponsesPath()).isEqualTo("/custom/responses");
+	}
+
+	@Test
+	void testResponsesPathDefaultsAndSurvivesMutate() {
+		OpenAiApi api = OpenAiApi.builder().apiKey(TEST_API_KEY).build();
+		assertThat(api.getResponsesPath()).isEqualTo(OpenAiApi.DEFAULT_RESPONSES_PATH);
+
+		OpenAiApi custom = OpenAiApi.builder().apiKey(TEST_API_KEY).responsesPath("/custom/responses").build();
+		assertThat(custom.mutate().build().getResponsesPath()).isEqualTo("/custom/responses");
 	}
 
 	@Test
