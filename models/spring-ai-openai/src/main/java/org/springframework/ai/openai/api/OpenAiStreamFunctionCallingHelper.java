@@ -18,6 +18,7 @@ package org.springframework.ai.openai.api;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletion;
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletion.Choice;
@@ -122,7 +123,9 @@ public class OpenAiStreamFunctionCallingHelper {
 		}
 		if (current.toolCalls() != null && !current.toolCalls().isEmpty()) {
 			if (current.toolCalls().size() > 1) {
-				throw new IllegalStateException("Currently only one tool call is supported per message!");
+				return new ChatCompletionMessage(content, role, name, toolCallId,
+						mergeBatchedToolCalls(previous.toolCalls(), current.toolCalls()), refusal, audioOutput,
+						annotations, reasoningContent, reasoningContent);
 			}
 			var currentToolCall = current.toolCalls().iterator().next();
 			if (StringUtils.hasText(currentToolCall.id())) {
@@ -142,6 +145,112 @@ public class OpenAiStreamFunctionCallingHelper {
 		}
 		return new ChatCompletionMessage(content, role, name, toolCallId, toolCalls, refusal, audioOutput, annotations,
 				reasoningContent, reasoningContent);
+	}
+
+	/**
+	 * Merges a delta that carries several tool-call fragments at once (some vLLM tool
+	 * parsers batch parallel tool calls this way) into the accumulated tool calls. Used
+	 * only for such deltas, which used to be rejected; a delta with a single fragment
+	 * keeps the id-based merge above unchanged.
+	 * <p>
+	 * A fragment with an {@code index} and an {@code id} continues the tool call that has
+	 * the same id and the same index; otherwise it starts a new tool call (this also
+	 * covers upstreams that reuse one index for every call). A fragment with an
+	 * {@code index} and no {@code id} continues the latest tool call with that index.
+	 * Tool calls continued by single-fragment deltas carry no index (the merge above
+	 * drops it); such a call owns a fragment only if it is the sole possible owner.
+	 * Ambiguous fragments are rejected, as before, rather than silently corrupting
+	 * another call. Fragments without an index follow the id-based rule of the
+	 * single-fragment merge.
+	 */
+	private List<ToolCall> mergeBatchedToolCalls(List<ToolCall> previous, List<ToolCall> current) {
+		List<ToolCall> toolCalls = new ArrayList<>();
+		if (previous != null) {
+			for (ToolCall toolCall : previous) {
+				if (toolCall != null) {
+					toolCalls.add(toolCall);
+				}
+			}
+		}
+		for (ToolCall fragment : current) {
+			if (fragment != null) {
+				mergeBatchedToolCallFragment(toolCalls, fragment);
+			}
+		}
+		return toolCalls;
+	}
+
+	private void mergeBatchedToolCallFragment(List<ToolCall> toolCalls, ToolCall current) {
+		int target = -1;
+		if (current.index() == null) {
+			// No index: the id-based rule of the single-fragment merge.
+			if (!StringUtils.hasText(current.id()) && !toolCalls.isEmpty()) {
+				target = toolCalls.size() - 1;
+			}
+		}
+		else if (StringUtils.hasText(current.id())) {
+			int sameId = lastIndexWhere(toolCalls, toolCall -> current.id().equals(toolCall.id()));
+			if (sameId >= 0 && toolCalls.get(sameId).index() == null) {
+				// Continuation or a new call reusing the id: cannot tell without the
+				// index.
+				throw cannotAttribute(current);
+			}
+			if (sameId >= 0 && current.index().equals(toolCalls.get(sameId).index())) {
+				target = sameId;
+			}
+		}
+		else {
+			// Candidates are the calls with this index and the calls whose index is
+			// unknown. The owner is the latest candidate if its index matches, or the
+			// only candidate; anything else is ambiguous.
+			Predicate<ToolCall> candidate = toolCall -> toolCall.index() == null
+					|| current.index().equals(toolCall.index());
+			target = lastIndexWhere(toolCalls, candidate);
+			if (target < 0
+					|| (toolCalls.get(target).index() == null && toolCalls.stream().filter(candidate).count() > 1)) {
+				throw cannotAttribute(current);
+			}
+		}
+
+		if (target >= 0) {
+			toolCalls.set(target, mergeKeepingIndex(toolCalls.get(target), withFunction(current)));
+		}
+		else {
+			toolCalls.add(withFunction(current));
+		}
+	}
+
+	private static IllegalStateException cannotAttribute(ToolCall fragment) {
+		return new IllegalStateException("Cannot attribute a streamed tool call fragment (index " + fragment.index()
+				+ ", id " + fragment.id() + ") to a single tool call!");
+	}
+
+	private static int lastIndexWhere(List<ToolCall> toolCalls, Predicate<ToolCall> predicate) {
+		for (int i = toolCalls.size() - 1; i >= 0; i--) {
+			if (predicate.test(toolCalls.get(i))) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	/**
+	 * A continuation fragment may omit {@code function} (e.g. carry only the type); an
+	 * empty function keeps the accumulated name and arguments intact.
+	 */
+	private static ToolCall withFunction(ToolCall toolCall) {
+		return (toolCall.function() != null ? toolCall : new ToolCall(toolCall.index(), toolCall.id(), toolCall.type(),
+				new ChatCompletionFunction(null, null)));
+	}
+
+	/**
+	 * Same as {@link #merge(ToolCall, ToolCall)}, but keeps the first seen {@code index}
+	 * so that later fragments of a batch can still be routed to this tool call.
+	 */
+	private ToolCall mergeKeepingIndex(ToolCall previous, ToolCall current) {
+		ToolCall merged = merge(previous, current);
+		Integer index = (previous.index() != null ? previous.index() : current.index());
+		return new ToolCall(index, merged.id(), merged.type(), merged.function());
 	}
 
 	private ToolCall merge(ToolCall previous, ToolCall current) {
