@@ -54,12 +54,10 @@ public abstract class RetryUtils {
 
 		@Override
 		public void handleError(URI url, HttpMethod method, @NonNull ClientHttpResponse response) throws IOException {
-			handleError(response);
+			throwOnError(response);
 		}
 
-		@Override
-		@SuppressWarnings("removal")
-		public void handleError(@NonNull ClientHttpResponse response) throws IOException {
+		private void throwOnError(ClientHttpResponse response) throws IOException {
 			if (response.getStatusCode().isError()) {
 				String error = StreamUtils.copyToString(response.getBody(), StandardCharsets.UTF_8);
 				String message = String.format("%s - %s", response.getStatusCode().value(), error);
