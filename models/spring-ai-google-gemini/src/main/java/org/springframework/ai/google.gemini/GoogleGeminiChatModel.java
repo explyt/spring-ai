@@ -16,9 +16,9 @@
 package org.springframework.ai.google.gemini;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.json.JsonMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -39,7 +39,7 @@ import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.ai.google.gemini.metadata.GoogleGeminiUsage;
 import org.springframework.ai.retry.RetryUtils;
 import org.springframework.http.ResponseEntity;
-import org.springframework.retry.support.RetryTemplate;
+import org.springframework.core.retry.RetryTemplate;
 import org.springframework.util.Assert;
 import reactor.core.publisher.Flux;
 import reactor.core.scheduler.Schedulers;
@@ -113,7 +113,7 @@ public class GoogleGeminiChatModel implements ChatModel, StreamingChatModel {
 		this.toolExecutionEligibilityPredicate = toolExecutionEligibilityPredicate;
 	}
 
-	private final ObjectMapper jacksonObjectMapper = new ObjectMapper();
+	private final JsonMapper jacksonObjectMapper = new JsonMapper();
 
 	// unfortunately, functions responses' response should be an object with fields.
 	// in case we expect a primitive or a list, we cannot really name it, so let us choose
@@ -145,7 +145,7 @@ public class GoogleGeminiChatModel implements ChatModel, StreamingChatModel {
 			}
 			return Map.of("value", primitive);
 		}
-		catch (JsonProcessingException e) {
+		catch (JacksonException e) {
 			// Fallback: treat as plain string
 			return Map.of("value", value);
 		}
@@ -168,7 +168,7 @@ public class GoogleGeminiChatModel implements ChatModel, StreamingChatModel {
 						return new AssistantMessage.ToolCall(functionCall.id(), "function_call", functionCall.name(),
 								jacksonObjectMapper.writeValueAsString(functionCall.args()));
 					}
-					catch (JsonProcessingException e) {
+					catch (JacksonException e) {
 						throw new RuntimeException(e);
 					}
 				})
@@ -187,7 +187,7 @@ public class GoogleGeminiChatModel implements ChatModel, StreamingChatModel {
 		Prompt requestPrompt = buildRequestPrompt(prompt);
 		ChatCompletionRequest request = createRequest(requestPrompt);
 
-		ChatResponse response = this.retryTemplate.execute(ctx -> {
+		ChatResponse response = RetryUtils.execute(this.retryTemplate, () -> {
 			ResponseEntity<ChatCompletion> completionEntity = this.doChatCompletion(request);
 			var chatCompletion = completionEntity.getBody();
 			if (chatCompletion == null) {

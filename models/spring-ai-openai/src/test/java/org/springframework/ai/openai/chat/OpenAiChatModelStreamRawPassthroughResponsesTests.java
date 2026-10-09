@@ -18,7 +18,7 @@ package org.springframework.ai.openai.chat;
 
 import java.util.List;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -35,7 +35,7 @@ import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.retry.RetryUtils;
 import org.springframework.http.codec.ServerSentEvent;
-import org.springframework.retry.support.RetryTemplate;
+import org.springframework.core.retry.RetryTemplate;
 import org.springframework.util.StringUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -165,7 +165,7 @@ public class OpenAiChatModelStreamRawPassthroughResponsesTests {
 		verify(this.apiSpy, times(1)).responsesStreamRawSse(bodyCaptor.capture(), any());
 		verify(this.apiSpy, never()).chatCompletionStreamRawSse(anyString(), any());
 
-		JsonNode sent = ModelOptionsUtils.OBJECT_MAPPER.readTree(bodyCaptor.getValue());
+		JsonNode sent = ModelOptionsUtils.JSON_MAPPER.readTree(bodyCaptor.getValue());
 		assertThat(sent.get("model").asText()).isEqualTo("gpt-upstream");
 		assertThat(sent.get("stream").asBoolean()).isTrue();
 		assertThat(sent.get("store").asBoolean()).isFalse();

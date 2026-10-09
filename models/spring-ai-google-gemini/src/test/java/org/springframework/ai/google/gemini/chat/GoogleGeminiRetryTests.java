@@ -29,10 +29,10 @@ import org.springframework.ai.google.gemini.api.GoogleGeminiApi.*;
 import org.springframework.ai.retry.RetryUtils;
 import org.springframework.ai.retry.TransientAiException;
 import org.springframework.http.ResponseEntity;
-import org.springframework.retry.RetryCallback;
-import org.springframework.retry.RetryContext;
-import org.springframework.retry.RetryListener;
-import org.springframework.retry.support.RetryTemplate;
+import org.springframework.core.retry.RetryListener;
+import org.springframework.core.retry.RetryPolicy;
+import org.springframework.core.retry.RetryTemplate;
+import org.springframework.core.retry.Retryable;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -58,14 +58,15 @@ public class GoogleGeminiRetryTests {
 		int onSuccessRetryCount = 0;
 
 		@Override
-		public <T, E extends Throwable> void onSuccess(RetryContext context, RetryCallback<T, E> callback, T result) {
-			onSuccessRetryCount = context.getRetryCount();
+		public void beforeRetry(final RetryPolicy retryPolicy, final Retryable<?> retryable) {
+			// Count each retry attempt
+			this.onErrorRetryCount++;
 		}
 
 		@Override
-		public <T, E extends Throwable> void onError(RetryContext context, RetryCallback<T, E> callback,
-				Throwable throwable) {
-			onErrorRetryCount = context.getRetryCount();
+		public void onRetrySuccess(final RetryPolicy retryPolicy, final Retryable<?> retryable, final Object result) {
+			// Count successful retries - we increment when we succeed after a failure
+			this.onSuccessRetryCount++;
 		}
 
 	}
@@ -78,9 +79,9 @@ public class GoogleGeminiRetryTests {
 
 	@BeforeEach
 	public void beforeEach() {
-		RetryTemplate retryTemplate = RetryUtils.DEFAULT_RETRY_TEMPLATE;
+		RetryTemplate retryTemplate = RetryUtils.SHORT_RETRY_TEMPLATE;
 		retryListener = new TestRetryListener();
-		retryTemplate.registerListener(retryListener);
+		retryTemplate.setRetryListener(retryListener);
 
 		chatModel = new GoogleGeminiChatModel(googleGeminiApi, GoogleGeminiChatOptions.builder().build(),
 				retryTemplate);
@@ -102,7 +103,7 @@ public class GoogleGeminiRetryTests {
 
 		assertThat(result).isNotNull();
 		assertThat(result.getResult().getOutput().getText()).isSameAs("Response");
-		assertThat(retryListener.onSuccessRetryCount).isEqualTo(2);
+		assertThat(retryListener.onSuccessRetryCount).isEqualTo(1);
 		assertThat(retryListener.onErrorRetryCount).isEqualTo(2);
 	}
 
@@ -131,7 +132,7 @@ public class GoogleGeminiRetryTests {
 		assertThat(result).isNotNull();
 		assertThat(Objects.requireNonNull(result.collectList().block()).get(0).getResult().getOutput().getText())
 			.isSameAs("Response");
-		assertThat(retryListener.onSuccessRetryCount).isEqualTo(2);
+		assertThat(retryListener.onSuccessRetryCount).isEqualTo(1);
 		assertThat(retryListener.onErrorRetryCount).isEqualTo(2);
 	}
 

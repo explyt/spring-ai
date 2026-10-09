@@ -19,8 +19,8 @@ package org.springframework.ai.openai.api;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Flux;
@@ -102,9 +102,9 @@ public final class OpenAiResponsesStreamAdapter {
 		}
 		JsonNode event;
 		try {
-			event = ModelOptionsUtils.OBJECT_MAPPER.readTree(data);
+			event = ModelOptionsUtils.JSON_MAPPER.readTree(data);
 		}
-		catch (JsonProcessingException e) {
+		catch (JacksonException e) {
 			logger.warn("Skipping unparseable Responses SSE frame: {}", e.getMessage());
 			return List.of();
 		}

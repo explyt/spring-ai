@@ -75,8 +75,8 @@ import org.springframework.ai.model.tool.internal.ToolCallReactiveContextHolder;
 import org.springframework.ai.retry.RetryUtils;
 import org.springframework.ai.support.UsageCalculator;
 import org.springframework.ai.tool.definition.ToolDefinition;
+import org.springframework.core.retry.RetryTemplate;
 import org.springframework.http.ResponseEntity;
-import org.springframework.retry.support.RetryTemplate;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.MimeType;
@@ -233,7 +233,8 @@ public class MistralAiChatModel implements ChatModel, FIMModel {
 	@Override
 	public ChatResponse callFIM(String prompt, String suffix) {
 		var request = new MistralAiApi.FIMCompletionRequest(defaultFIMOptions, false, prompt, suffix);
-		var completionEntity = this.retryTemplate.execute(ctx -> this.mistralAiApi.fimCompletionEntity(request));
+		var completionEntity = RetryUtils.execute(this.retryTemplate,
+				() -> this.mistralAiApi.fimCompletionEntity(request));
 		var chatResponse = fromCompletion(completionEntity, prompt, null);
 		return chatResponse;
 	}
@@ -252,8 +253,8 @@ public class MistralAiChatModel implements ChatModel, FIMModel {
 					this.observationRegistry)
 			.observe(() -> {
 
-				ResponseEntity<ChatCompletion> completionEntity = this.retryTemplate
-					.execute(ctx -> this.mistralAiApi.chatCompletionEntity(request));
+				ResponseEntity<ChatCompletion> completionEntity = RetryUtils.execute(this.retryTemplate,
+						() -> this.mistralAiApi.chatCompletionEntity(request));
 
 				var chatResponse = fromCompletion(completionEntity, prompt.getContents(), previousChatResponse);
 				observationContext.setResponse(chatResponse);
@@ -302,8 +303,8 @@ public class MistralAiChatModel implements ChatModel, FIMModel {
 
 			observation.parentObservation(contextView.getOrDefault(ObservationThreadLocalAccessor.KEY, null)).start();
 
-			Flux<ChatCompletionChunk> completionChunks = this.retryTemplate
-				.execute(ctx -> this.mistralAiApi.chatCompletionStream(request));
+			Flux<ChatCompletionChunk> completionChunks = RetryUtils.execute(this.retryTemplate,
+					() -> this.mistralAiApi.chatCompletionStream(request));
 
 			// For chunked responses, only the first chunk contains the choice role.
 			// The rest of the chunks with same ID share the same role.

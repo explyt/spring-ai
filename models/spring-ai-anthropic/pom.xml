@@ -55,10 +55,6 @@
 			<version>${project.parent.version}</version>
 		</dependency>
 
-		<dependency>
-			<groupId>io.rest-assured</groupId>
-			<artifactId>json-path</artifactId>
-		</dependency>
 
 		<dependency>
 			<groupId>com.github.victools</groupId>
@@ -101,11 +97,6 @@
 			<scope>test</scope>
 		</dependency>
 
-		<dependency>
-			<groupId>com.fasterxml.jackson.dataformat</groupId>
-			<artifactId>jackson-dataformat-xml</artifactId>
-			<scope>test</scope>
-		</dependency>
 	</dependencies>
 
 </project>
