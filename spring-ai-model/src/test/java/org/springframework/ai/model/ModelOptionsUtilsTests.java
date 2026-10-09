@@ -388,4 +388,38 @@ public class ModelOptionsUtilsTests {
 
 	}
 
+	record PrimitiveHolder(@JsonProperty("flag") boolean flag, @JsonProperty("count") int count) {
+	}
+
+	public static class Unordered {
+
+		@JsonProperty("zeta")
+		public String zeta = "z";
+
+		@JsonProperty("alpha")
+		public String alpha = "a";
+
+	}
+
+	@Test
+	void jsonMapperKeepsJackson2LeniencyForTrailingTokens() {
+		// Model-generated tool arguments sometimes carry trailing junk; Jackson 2 read
+		// the first value.
+		assertThat(ModelOptionsUtils.jsonToMap("{\"a\":1}}")).containsEntry("a", 1);
+		assertThat(ModelOptionsUtils.jsonToMap("{\"a\":1}{\"b\":2}")).containsEntry("a", 1).doesNotContainKey("b");
+	}
+
+	@Test
+	void jsonMapperAcceptsNullForPrimitives() {
+		PrimitiveHolder holder = ModelOptionsUtils.JSON_MAPPER.readValue("{\"flag\":null,\"count\":null}",
+				PrimitiveHolder.class);
+		assertThat(holder.flag()).isFalse();
+		assertThat(holder.count()).isZero();
+	}
+
+	@Test
+	void jsonMapperKeepsDeclarationOrderInsteadOfSortingProperties() {
+		assertThat(ModelOptionsUtils.toJsonString(new Unordered())).isEqualTo("{\"zeta\":\"z\",\"alpha\":\"a\"}");
+	}
+
 }

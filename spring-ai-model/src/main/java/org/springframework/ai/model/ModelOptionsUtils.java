@@ -32,6 +32,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.MapperFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.cfg.CoercionAction;
@@ -69,6 +70,13 @@ public abstract class ModelOptionsUtils {
 	public static final JsonMapper JSON_MAPPER = JsonMapper.builder()
 		.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
 		.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS)
+		// Keep the Jackson 2 behaviour this fork relied on. Jackson 3 turns these on by
+		// default: model-generated tool arguments with trailing junk ("{...}}") or a null
+		// for a primitive would otherwise throw, and property sorting would change the
+		// bytes of serialized requests (and so prompt-prefix cache hits).
+		.disable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+		.disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
+		.disable(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY)
 		.enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT)
 		// Configure coercion for empty strings to null for Enum types
 		// This fixes the issue where empty string finish_reason values cause

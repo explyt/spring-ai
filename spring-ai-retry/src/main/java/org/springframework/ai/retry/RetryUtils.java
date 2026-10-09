@@ -172,9 +172,22 @@ public abstract class RetryUtils {
 			return retryTemplate.execute(retryable);
 		}
 		catch (RetryException e) {
-			throw (e.getCause() instanceof RuntimeException runtime) ? runtime
-					: new RuntimeException(e.getMessage(), e.getCause());
+			// explyt: rethrow the last failure unchanged, as spring-retry did. Upstream
+			// wraps a
+			// checked cause into a bare RuntimeException, which hides typed checked
+			// exceptions
+			// thrown by ResponseErrorHandlers (e.g. ai-router's AIRouterException).
+			Throwable cause = e.getCause();
+			if (cause == null) {
+				throw new IllegalStateException(e.getMessage(), e);
+			}
+			throw RetryUtils.<RuntimeException>sneakyThrow(cause);
 		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private static <T extends Throwable> T sneakyThrow(Throwable t) throws T {
+		throw (T) t;
 	}
 
 }
