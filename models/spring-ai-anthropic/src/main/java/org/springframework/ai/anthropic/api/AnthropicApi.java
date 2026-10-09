@@ -178,7 +178,7 @@ public final class AnthropicApi {
 		return this.restClient.post()
 			.uri(this.completionsPath)
 			.headers(headers -> {
-				headers.addAll(additionalHttpHeader);
+				additionalHttpHeader.forEach(headers::addAll);
 				addDefaultHeadersIfMissing(headers);
 			})
 			.body(chatRequest)
@@ -247,7 +247,7 @@ public final class AnthropicApi {
 		Flux<String> sseLines = this.webClient.post()
 			.uri(this.completionsPath)
 			.headers(headers -> {
-				headers.addAll(additionalHttpHeader);
+				additionalHttpHeader.forEach(headers::addAll);
 				addDefaultHeadersIfMissing(headers);
 			}) // @formatter:off
 			.body(Mono.just(chatRequest), ChatCompletionRequest.class)
@@ -378,7 +378,7 @@ public final class AnthropicApi {
 	}
 
 	private void addDefaultHeadersIfMissing(HttpHeaders headers) {
-		if (!headers.containsKey(HEADER_X_API_KEY)) {
+		if (headers.getFirst(HEADER_X_API_KEY) == null) {
 			String apiKeyValue = this.apiKey.getValue();
 			if (StringUtils.hasText(apiKeyValue)) {
 				headers.add(HEADER_X_API_KEY, apiKeyValue);
@@ -395,7 +395,7 @@ public final class AnthropicApi {
 	 */
 	private void addHeadersIfMissing(HttpHeaders headers, MultiValueMap<String, String> additionalHttpHeader) {
 		additionalHttpHeader.forEach((key, values) -> {
-			if (!headers.containsKey(key)) {
+			if (headers.getFirst(key) == null) {
 				headers.addAll(key, values);
 			}
 		});
