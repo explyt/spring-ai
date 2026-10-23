@@ -20,19 +20,18 @@ import java.lang.reflect.Type;
 import java.util.Map;
 import java.util.Objects;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.util.DefaultIndenter;
-import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectWriter;
-import com.fasterxml.jackson.databind.json.JsonMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.util.DefaultIndenter;
+import tools.jackson.core.util.DefaultPrettyPrinter;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectWriter;
+import tools.jackson.databind.json.JsonMapper;
 import com.github.victools.jsonschema.generator.Option;
 import com.github.victools.jsonschema.generator.SchemaGenerator;
 import com.github.victools.jsonschema.generator.SchemaGeneratorConfig;
 import com.github.victools.jsonschema.generator.SchemaGeneratorConfigBuilder;
-import com.github.victools.jsonschema.module.jackson.JacksonModule;
+import com.github.victools.jsonschema.module.jackson.JacksonSchemaModule;
 import com.github.victools.jsonschema.module.jackson.JacksonOption;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,7 +70,7 @@ public class BeanOutputConverter<T> implements StructuredOutputConverter<T> {
 	private final Type type;
 
 	/** The object mapper used for deserialization and other JSON operations. */
-	private final ObjectMapper objectMapper;
+	private final JsonMapper jsonMapper;
 
 	/** Holds the generated JSON schema for the target type. */
 	private String jsonSchema;
@@ -88,10 +87,10 @@ public class BeanOutputConverter<T> implements StructuredOutputConverter<T> {
 	 * Constructor to initialize with the target type's class, a custom object mapper, and
 	 * a line endings normalizer to ensure consistent line endings on any platform.
 	 * @param clazz The target type's class.
-	 * @param objectMapper Custom object mapper for JSON operations. endings.
+	 * @param jsonMapper Custom JSON mapper for JSON operations. endings.
 	 */
-	public BeanOutputConverter(Class<T> clazz, ObjectMapper objectMapper) {
-		this(ParameterizedTypeReference.forType(clazz), objectMapper);
+	public BeanOutputConverter(Class<T> clazz, JsonMapper jsonMapper) {
+		this(ParameterizedTypeReference.forType(clazz), jsonMapper);
 	}
 
 	/**
@@ -107,10 +106,10 @@ public class BeanOutputConverter<T> implements StructuredOutputConverter<T> {
 	 * mapper, and a line endings normalizer to ensure consistent line endings on any
 	 * platform.
 	 * @param typeRef The target class type reference.
-	 * @param objectMapper Custom object mapper for JSON operations. endings.
+	 * @param jsonMapper Custom JSON mapper for JSON operations. endings.
 	 */
-	public BeanOutputConverter(ParameterizedTypeReference<T> typeRef, ObjectMapper objectMapper) {
-		this(typeRef.getType(), objectMapper);
+	public BeanOutputConverter(ParameterizedTypeReference<T> typeRef, JsonMapper jsonMapper) {
+		this(typeRef.getType(), jsonMapper);
 	}
 
 	/**
@@ -118,12 +117,12 @@ public class BeanOutputConverter<T> implements StructuredOutputConverter<T> {
 	 * mapper, and a line endings normalizer to ensure consistent line endings on any
 	 * platform.
 	 * @param type The target class type.
-	 * @param objectMapper Custom object mapper for JSON operations. endings.
+	 * @param jsonMapper Custom JSON mapper for JSON operations. endings.
 	 */
-	private BeanOutputConverter(Type type, ObjectMapper objectMapper) {
+	private BeanOutputConverter(Type type, JsonMapper jsonMapper) {
 		Objects.requireNonNull(type, "Type cannot be null;");
 		this.type = type;
-		this.objectMapper = objectMapper != null ? objectMapper : getObjectMapper();
+		this.jsonMapper = jsonMapper != null ? jsonMapper : getJsonMapper();
 		generateSchema();
 	}
 
@@ -131,7 +130,7 @@ public class BeanOutputConverter<T> implements StructuredOutputConverter<T> {
 	 * Generates the JSON schema for the target type.
 	 */
 	private void generateSchema() {
-		JacksonModule jacksonModule = new JacksonModule(JacksonOption.RESPECT_JSONPROPERTY_REQUIRED,
+		JacksonSchemaModule jacksonModule = new JacksonSchemaModule(JacksonOption.RESPECT_JSONPROPERTY_REQUIRED,
 				JacksonOption.RESPECT_JSONPROPERTY_ORDER);
 		SchemaGeneratorConfigBuilder configBuilder = new SchemaGeneratorConfigBuilder(
 				com.github.victools.jsonschema.generator.SchemaVersion.DRAFT_2020_12,
@@ -146,12 +145,13 @@ public class BeanOutputConverter<T> implements StructuredOutputConverter<T> {
 		SchemaGeneratorConfig config = configBuilder.build();
 		SchemaGenerator generator = new SchemaGenerator(config);
 		JsonNode jsonNode = generator.generateSchema(this.type);
-		ObjectWriter objectWriter = this.objectMapper.writer(new DefaultPrettyPrinter()
-			.withObjectIndenter(new DefaultIndenter().withLinefeed(System.lineSeparator())));
+		ObjectWriter objectWriter = this.jsonMapper.writer()
+			.with(new DefaultPrettyPrinter()
+				.withObjectIndenter(new DefaultIndenter().withLinefeed(System.lineSeparator())));
 		try {
 			this.jsonSchema = objectWriter.writeValueAsString(jsonNode);
 		}
-		catch (JsonProcessingException e) {
+		catch (JacksonException e) {
 			logger.error("Could not pretty print json schema for jsonNode: {}", jsonNode);
 			throw new RuntimeException("Could not pretty print json schema for " + this.type, e);
 		}
@@ -186,9 +186,9 @@ public class BeanOutputConverter<T> implements StructuredOutputConverter<T> {
 				// Trim again to remove any potential whitespace
 				text = text.trim();
 			}
-			return (T) this.objectMapper.readValue(text, this.objectMapper.constructType(this.type));
+			return (T) this.jsonMapper.readValue(text, this.jsonMapper.constructType(this.type));
 		}
-		catch (JsonProcessingException e) {
+		catch (JacksonException e) {
 			logger.error(SENSITIVE_DATA_MARKER,
 					"Could not parse the given text to the desired target type: \"{}\" into {}", text, this.type);
 			throw new RuntimeException(e);
@@ -196,10 +196,10 @@ public class BeanOutputConverter<T> implements StructuredOutputConverter<T> {
 	}
 
 	/**
-	 * Configures and returns an object mapper for JSON operations.
-	 * @return Configured object mapper.
+	 * Configures and returns a JSON mapper for JSON operations.
+	 * @return Configured JSON mapper.
 	 */
-	protected ObjectMapper getObjectMapper() {
+	protected JsonMapper getJsonMapper() {
 		return JsonMapper.builder()
 			.addModules(JacksonUtils.instantiateAvailableModules())
 			.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
@@ -234,9 +234,9 @@ public class BeanOutputConverter<T> implements StructuredOutputConverter<T> {
 
 	public Map<String, Object> getJsonSchemaMap() {
 		try {
-			return this.objectMapper.readValue(this.jsonSchema, Map.class);
+			return this.jsonMapper.readValue(this.jsonSchema, Map.class);
 		}
-		catch (JsonProcessingException ex) {
+		catch (JacksonException ex) {
 			logger.error("Could not parse the JSON Schema to a Map object", ex);
 			throw new IllegalStateException(ex);
 		}

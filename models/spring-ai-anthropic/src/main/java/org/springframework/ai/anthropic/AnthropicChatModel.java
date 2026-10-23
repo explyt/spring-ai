@@ -26,10 +26,10 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
@@ -85,11 +85,11 @@ import org.springframework.ai.retry.RetryUtils;
 import org.springframework.ai.support.UsageCalculator;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.ai.util.json.JsonParser;
+import org.springframework.core.retry.RetryTemplate;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
-import org.springframework.retry.support.RetryTemplate;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
-import org.springframework.util.MultiValueMap;
 import org.springframework.util.StringUtils;
 
 /**
@@ -222,8 +222,8 @@ public class AnthropicChatModel implements ChatModel {
 					this.observationRegistry)
 			.observe(() -> {
 
-				ResponseEntity<ChatCompletionResponse> completionEntity = this.retryTemplate
-					.execute(ctx -> rawBody != null
+				ResponseEntity<ChatCompletionResponse> completionEntity = RetryUtils
+					.execute(this.retryTemplate, () -> rawBody != null
 							? this.anthropicApi.chatCompletionEntityRaw(applyOverrides(rawBody, request),
 									this.getAdditionalHttpHeaders(prompt))
 							: this.anthropicApi.chatCompletionEntity(request, this.getAdditionalHttpHeaders(prompt)));
@@ -645,14 +645,15 @@ public class AnthropicChatModel implements ChatModel {
 				+ ". Supported types are: images (image/*) and PDF documents (application/pdf)");
 	}
 
-	private MultiValueMap<String, String> getAdditionalHttpHeaders(Prompt prompt) {
+	private HttpHeaders getAdditionalHttpHeaders(Prompt prompt) {
 
 		Map<String, String> headers = new HashMap<>(this.defaultOptions.getHttpHeaders());
 		if (prompt.getOptions() != null && prompt.getOptions() instanceof AnthropicChatOptions chatOptions) {
 			headers.putAll(chatOptions.getHttpHeaders());
 		}
-		return CollectionUtils.toMultiValueMap(
-				headers.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> List.of(e.getValue()))));
+		HttpHeaders httpHeaders = new HttpHeaders();
+		headers.forEach(httpHeaders::add);
+		return httpHeaders;
 	}
 
 	/**
@@ -666,7 +667,7 @@ public class AnthropicChatModel implements ChatModel {
 	 */
 	private String applyOverrides(String rawBody, ChatCompletionRequest request) {
 		try {
-			JsonNode tree = ModelOptionsUtils.OBJECT_MAPPER.readTree(rawBody);
+			JsonNode tree = ModelOptionsUtils.JSON_MAPPER.readTree(rawBody);
 			if (!(tree instanceof ObjectNode root)) {
 				throw new IllegalArgumentException("Raw passthrough request body must be a JSON object");
 			}
@@ -677,9 +678,9 @@ public class AnthropicChatModel implements ChatModel {
 			if (!root.hasNonNull("max_tokens") && request.maxTokens() != null) {
 				root.put("max_tokens", request.maxTokens());
 			}
-			return ModelOptionsUtils.OBJECT_MAPPER.writeValueAsString(root);
+			return ModelOptionsUtils.JSON_MAPPER.writeValueAsString(root);
 		}
-		catch (JsonProcessingException e) {
+		catch (JacksonException e) {
 			throw new IllegalArgumentException("Failed to apply overrides to raw passthrough request body", e);
 		}
 	}

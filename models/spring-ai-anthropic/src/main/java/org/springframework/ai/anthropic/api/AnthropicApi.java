@@ -50,8 +50,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.util.Assert;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.ResponseErrorHandler;
 import org.springframework.web.client.RestClient;
@@ -151,13 +149,27 @@ public final class AnthropicApi {
 	}
 
 	/**
+	 * Create a new client api.
+	 * @param completionsPath path to append to the base URL.
+	 * @param restClient RestClient instance.
+	 * @param webClient WebClient instance.
+	 * @param apiKey Anthropic api Key.
+	 */
+	public AnthropicApi(String completionsPath, RestClient restClient, WebClient webClient, ApiKey apiKey) {
+		this.completionsPath = completionsPath;
+		this.restClient = restClient;
+		this.webClient = webClient;
+		this.apiKey = apiKey;
+	}
+
+	/**
 	 * Creates a model response for the given chat conversation.
 	 * @param chatRequest The chat completion request.
 	 * @return Entity response with {@link ChatCompletionResponse} as a body and HTTP
 	 * status code and headers.
 	 */
 	public ResponseEntity<ChatCompletionResponse> chatCompletionEntity(ChatCompletionRequest chatRequest) {
-		return chatCompletionEntity(chatRequest, new LinkedMultiValueMap<>());
+		return chatCompletionEntity(chatRequest, new HttpHeaders());
 	}
 
 	/**
@@ -168,7 +180,7 @@ public final class AnthropicApi {
 	 * status code and headers.
 	 */
 	public ResponseEntity<ChatCompletionResponse> chatCompletionEntity(ChatCompletionRequest chatRequest,
-			MultiValueMap<String, String> additionalHttpHeader) {
+			HttpHeaders additionalHttpHeader) {
 
 		Assert.notNull(chatRequest, "The request body can not be null.");
 		Assert.isTrue(!chatRequest.stream(), "Request must set the stream property to false.");
@@ -178,7 +190,7 @@ public final class AnthropicApi {
 		return this.restClient.post()
 			.uri(this.completionsPath)
 			.headers(headers -> {
-				additionalHttpHeader.forEach(headers::addAll);
+				headers.addAll(additionalHttpHeader);
 				addDefaultHeadersIfMissing(headers);
 			})
 			.body(chatRequest)
@@ -201,7 +213,7 @@ public final class AnthropicApi {
 	 * status code and headers.
 	 */
 	public ResponseEntity<ChatCompletionResponse> chatCompletionEntityRaw(String rawBody,
-			MultiValueMap<String, String> additionalHttpHeader) {
+			HttpHeaders additionalHttpHeader) {
 
 		Assert.notNull(rawBody, "The request body can not be null.");
 		Assert.notNull(additionalHttpHeader, "The additional HTTP headers can not be null.");
@@ -226,7 +238,7 @@ public final class AnthropicApi {
 	 * @return Returns a {@link Flux} stream from chat completion chunks.
 	 */
 	public Flux<ChatCompletionResponse> chatCompletionStream(ChatCompletionRequest chatRequest) {
-		return chatCompletionStream(chatRequest, new LinkedMultiValueMap<>());
+		return chatCompletionStream(chatRequest, new HttpHeaders());
 	}
 
 	/**
@@ -237,7 +249,7 @@ public final class AnthropicApi {
 	 * @return Returns a {@link Flux} stream from chat completion chunks.
 	 */
 	public Flux<ChatCompletionResponse> chatCompletionStream(ChatCompletionRequest chatRequest,
-			MultiValueMap<String, String> additionalHttpHeader) {
+			HttpHeaders additionalHttpHeader) {
 
 		Assert.notNull(chatRequest, "The request body can not be null.");
 		Assert.isTrue(chatRequest.stream(), "Request must set the stream property to true.");
@@ -247,7 +259,7 @@ public final class AnthropicApi {
 		Flux<String> sseLines = this.webClient.post()
 			.uri(this.completionsPath)
 			.headers(headers -> {
-				additionalHttpHeader.forEach(headers::addAll);
+				headers.addAll(additionalHttpHeader);
 				addDefaultHeadersIfMissing(headers);
 			}) // @formatter:off
 			.body(Mono.just(chatRequest), ChatCompletionRequest.class)
@@ -272,7 +284,7 @@ public final class AnthropicApi {
 	 * @return Returns a {@link Flux} stream from chat completion chunks.
 	 */
 	public Flux<ChatCompletionResponse> chatCompletionStreamRaw(String rawBody,
-			MultiValueMap<String, String> additionalHttpHeader) {
+			HttpHeaders additionalHttpHeader) {
 
 		Assert.notNull(rawBody, "The request body can not be null.");
 		Assert.notNull(additionalHttpHeader, "The additional HTTP headers can not be null.");
@@ -306,8 +318,7 @@ public final class AnthropicApi {
 	 * absent.
 	 * @return a {@link Flux} of raw {@link ServerSentEvent} frames.
 	 */
-	public Flux<ServerSentEvent<String>> chatCompletionStreamRawSse(String rawBody,
-			MultiValueMap<String, String> additionalHttpHeader) {
+	public Flux<ServerSentEvent<String>> chatCompletionStreamRawSse(String rawBody, HttpHeaders additionalHttpHeader) {
 
 		Assert.notNull(rawBody, "The request body can not be null.");
 		Assert.notNull(additionalHttpHeader, "The additional HTTP headers can not be null.");
@@ -378,7 +389,7 @@ public final class AnthropicApi {
 	}
 
 	private void addDefaultHeadersIfMissing(HttpHeaders headers) {
-		if (headers.getFirst(HEADER_X_API_KEY) == null) {
+		if (!headers.containsHeader(HEADER_X_API_KEY)) {
 			String apiKeyValue = this.apiKey.getValue();
 			if (StringUtils.hasText(apiKeyValue)) {
 				headers.add(HEADER_X_API_KEY, apiKeyValue);
@@ -393,9 +404,9 @@ public final class AnthropicApi {
 	 * lazily injected API key. Guarding auth headers (x-api-key etc.) is the calling
 	 * gateway's responsibility.
 	 */
-	private void addHeadersIfMissing(HttpHeaders headers, MultiValueMap<String, String> additionalHttpHeader) {
+	private void addHeadersIfMissing(HttpHeaders headers, HttpHeaders additionalHttpHeader) {
 		additionalHttpHeader.forEach((key, values) -> {
-			if (headers.getFirst(key) == null) {
+			if (!headers.containsHeader(key)) {
 				headers.addAll(key, values);
 			}
 		});

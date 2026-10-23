@@ -20,12 +20,11 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
@@ -82,13 +81,13 @@ import org.springframework.ai.support.UsageCalculator;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
+import org.springframework.core.retry.RetryTemplate;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
-import org.springframework.retry.support.RetryTemplate;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.MimeType;
 import org.springframework.util.MimeTypeUtils;
-import org.springframework.util.MultiValueMap;
 import org.springframework.util.StringUtils;
 
 /**
@@ -214,10 +213,11 @@ public class OpenAiChatModel implements ChatModel {
 					this.observationRegistry)
 			.observe(() -> {
 
-				ResponseEntity<ChatCompletion> completionEntity = this.retryTemplate.execute(ctx -> rawBody != null
-						? this.openAiApi.chatCompletionEntityRaw(applyOverrides(rawBody, request),
-								getAdditionalHttpHeaders(prompt))
-						: this.openAiApi.chatCompletionEntity(request, getAdditionalHttpHeaders(prompt)));
+				ResponseEntity<ChatCompletion> completionEntity = RetryUtils.execute(this.retryTemplate,
+						() -> rawBody != null
+								? this.openAiApi.chatCompletionEntityRaw(applyOverrides(rawBody, request),
+										getAdditionalHttpHeaders(prompt))
+								: this.openAiApi.chatCompletionEntity(request, getAdditionalHttpHeaders(prompt)));
 
 				var chatCompletion = completionEntity.getBody();
 
@@ -436,7 +436,7 @@ public class OpenAiChatModel implements ChatModel {
 	 * @param parser turns the SSE {@code data:} payloads into Chat Completions chunks.
 	 */
 	private Flux<DualStreamItem> teeRawStream(Prompt prompt, Function<ChatCompletionRequest, String> override,
-			BiFunction<String, MultiValueMap<String, String>, Flux<org.springframework.http.codec.ServerSentEvent<String>>> source,
+			BiFunction<String, HttpHeaders, Flux<org.springframework.http.codec.ServerSentEvent<String>>> source,
 			Function<Flux<String>, Flux<OpenAiApi.ChatCompletionChunk>> parser) {
 		return Flux.deferContextual(contextView -> {
 			Prompt requestPrompt = buildRequestPrompt(prompt);
@@ -567,14 +567,15 @@ public class OpenAiChatModel implements ChatModel {
 		// @formatter:on
 	}
 
-	private MultiValueMap<String, String> getAdditionalHttpHeaders(Prompt prompt) {
+	private HttpHeaders getAdditionalHttpHeaders(Prompt prompt) {
 
 		Map<String, String> headers = new HashMap<>(this.defaultOptions.getHttpHeaders());
 		if (prompt.getOptions() != null && prompt.getOptions() instanceof OpenAiChatOptions chatOptions) {
 			headers.putAll(chatOptions.getHttpHeaders());
 		}
-		return CollectionUtils.toMultiValueMap(
-				headers.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> List.of(e.getValue()))));
+		HttpHeaders httpHeaders = new HttpHeaders();
+		headers.forEach(httpHeaders::add);
+		return httpHeaders;
 	}
 
 	/**
@@ -586,7 +587,7 @@ public class OpenAiChatModel implements ChatModel {
 	 */
 	private String applyOverrides(String rawBody, ChatCompletionRequest request) {
 		try {
-			JsonNode tree = ModelOptionsUtils.OBJECT_MAPPER.readTree(rawBody);
+			JsonNode tree = ModelOptionsUtils.JSON_MAPPER.readTree(rawBody);
 			if (!(tree instanceof ObjectNode root)) {
 				throw new IllegalArgumentException("Raw passthrough request body must be a JSON object");
 			}
@@ -597,13 +598,13 @@ public class OpenAiChatModel implements ChatModel {
 			root.put("stream", stream);
 			if (stream) {
 				ObjectNode streamOptions = root.get("stream_options") instanceof ObjectNode existing ? existing
-						: ModelOptionsUtils.OBJECT_MAPPER.createObjectNode();
+						: ModelOptionsUtils.JSON_MAPPER.createObjectNode();
 				streamOptions.put("include_usage", true);
 				root.set("stream_options", streamOptions);
 			}
-			return ModelOptionsUtils.OBJECT_MAPPER.writeValueAsString(root);
+			return ModelOptionsUtils.JSON_MAPPER.writeValueAsString(root);
 		}
-		catch (JsonProcessingException e) {
+		catch (JacksonException e) {
 			throw new IllegalArgumentException("Failed to apply overrides to raw passthrough request body", e);
 		}
 	}
@@ -620,7 +621,7 @@ public class OpenAiChatModel implements ChatModel {
 	 */
 	private String applyResponsesOverrides(String rawBody, ChatCompletionRequest request) {
 		try {
-			JsonNode tree = ModelOptionsUtils.OBJECT_MAPPER.readTree(rawBody);
+			JsonNode tree = ModelOptionsUtils.JSON_MAPPER.readTree(rawBody);
 			if (!(tree instanceof ObjectNode root)) {
 				throw new IllegalArgumentException("Raw passthrough request body must be a JSON object");
 			}
@@ -629,9 +630,9 @@ public class OpenAiChatModel implements ChatModel {
 			}
 			root.put("stream", Boolean.TRUE.equals(request.stream()));
 			root.put("store", false);
-			return ModelOptionsUtils.OBJECT_MAPPER.writeValueAsString(root);
+			return ModelOptionsUtils.JSON_MAPPER.writeValueAsString(root);
 		}
-		catch (JsonProcessingException e) {
+		catch (JacksonException e) {
 			throw new IllegalArgumentException("Failed to apply overrides to raw Responses request body", e);
 		}
 	}
@@ -916,7 +917,7 @@ public class OpenAiChatModel implements ChatModel {
 		}
 	}
 
-	private final ObjectMapper schemaMapper = new ObjectMapper();
+	private final JsonMapper schemaMapper = new JsonMapper();
 
 	// https://platform.openai.com/docs/guides/function-calling?api-mode=responses&strict-mode=enabled#strict-mode
 	private boolean qualifiesForStrict(Map<String, Object> schema) {
@@ -960,7 +961,7 @@ public class OpenAiChatModel implements ChatModel {
 
 			// Gather property keys
 			HashSet<String> propertyKeys = new HashSet<>();
-			props.fieldNames().forEachRemaining(propertyKeys::add);
+			propertyKeys.addAll(props.propertyNames());
 
 			// required must be an array and equal to all property keys
 			JsonNode req = node.path("required");

@@ -30,6 +30,7 @@ import org.springframework.ai.chat.metadata.RateLimit;
 import org.springframework.ai.openai.metadata.OpenAiRateLimit;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.Assert;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
 import static org.springframework.ai.openai.metadata.support.OpenAiApiResponseHeaders.REQUESTS_LIMIT_HEADER;
@@ -70,18 +71,18 @@ public final class OpenAiResponseHeaderExtractor {
 
 	private static Duration getHeaderAsDuration(ResponseEntity<?> response, String headerName) {
 		var headers = response.getHeaders();
-		String value = headers.getFirst(headerName);
-		if (value != null) {
-			return DurationFormatter.TIME_UNIT.parse(value);
+		var values = headers.get(headerName);
+		if (!CollectionUtils.isEmpty(values)) {
+			return DurationFormatter.TIME_UNIT.parse(values.get(0));
 		}
 		return null;
 	}
 
 	private static Long getHeaderAsLong(ResponseEntity<?> response, String headerName) {
 		var headers = response.getHeaders();
-		String value = headers.getFirst(headerName);
-		if (value != null) {
-			return parseLong(headerName, value);
+		var values = headers.get(headerName);
+		if (!CollectionUtils.isEmpty(values)) {
+			return parseLong(headerName, values.get(0));
 		}
 		return null;
 	}

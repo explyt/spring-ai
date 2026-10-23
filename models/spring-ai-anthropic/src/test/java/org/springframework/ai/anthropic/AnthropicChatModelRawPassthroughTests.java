@@ -18,7 +18,7 @@ package org.springframework.ai.anthropic;
 
 import java.util.List;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -84,7 +84,7 @@ public class AnthropicChatModelRawPassthroughTests {
 
 		ChatResponse response = this.chatModel.callRaw(new Prompt("typed prompt"), rawBody);
 
-		JsonNode sent = ModelOptionsUtils.OBJECT_MAPPER.readTree(bodyCaptor.getValue());
+		JsonNode sent = ModelOptionsUtils.JSON_MAPPER.readTree(bodyCaptor.getValue());
 		// Gateway-owned overrides.
 		assertThat(sent.get("model").asText()).isEqualTo(MODEL);
 		assertThat(sent.get("stream").asBoolean()).isFalse();
@@ -109,7 +109,7 @@ public class AnthropicChatModelRawPassthroughTests {
 
 		this.chatModel.callRaw(new Prompt("typed prompt"), "{\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}");
 
-		JsonNode sent = ModelOptionsUtils.OBJECT_MAPPER.readTree(bodyCaptor.getValue());
+		JsonNode sent = ModelOptionsUtils.JSON_MAPPER.readTree(bodyCaptor.getValue());
 		// Anthropic requires max_tokens; the gateway default fills the gap.
 		assertThat(sent.get("max_tokens").asInt()).isEqualTo(4096);
 	}
@@ -127,7 +127,7 @@ public class AnthropicChatModelRawPassthroughTests {
 			.collectList()
 			.block();
 
-		JsonNode sent = ModelOptionsUtils.OBJECT_MAPPER.readTree(bodyCaptor.getValue());
+		JsonNode sent = ModelOptionsUtils.JSON_MAPPER.readTree(bodyCaptor.getValue());
 		assertThat(sent.get("model").asText()).isEqualTo(MODEL);
 		assertThat(sent.get("stream").asBoolean()).isTrue();
 		assertThat(sent.get("max_tokens").asInt()).isEqualTo(100);

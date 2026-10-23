@@ -18,7 +18,6 @@ package org.springframework.ai.openai.chat;
 
 import java.util.List;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,7 +39,7 @@ import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage;
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.Role;
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionRequest;
 import org.springframework.ai.retry.RetryUtils;
-import org.springframework.retry.support.RetryTemplate;
+import org.springframework.core.retry.RetryTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -112,7 +111,7 @@ public class OpenAiStreamingFinishReasonTests {
 	}
 
 	@Test
-	void testJsonDeserializationWithEmptyStringFinishReason() throws JsonProcessingException {
+	void testJsonDeserializationWithEmptyStringFinishReason() {
 		// Test the specific JSON from the issue report
 		String problematicJson = """
 				{
@@ -149,7 +148,7 @@ public class OpenAiStreamingFinishReasonTests {
 	}
 
 	@Test
-	void testJsonDeserializationWithNullFinishReason() throws JsonProcessingException {
+	void testJsonDeserializationWithNullFinishReason() {
 		// Test with null finish_reason (should work fine)
 		String validJson = """
 				{

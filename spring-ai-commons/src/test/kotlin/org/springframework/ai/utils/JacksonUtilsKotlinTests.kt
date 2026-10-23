@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import com.fasterxml.jackson.databind.json.JsonMapper
+import tools.jackson.databind.json.JsonMapper
 import org.assertj.core.api.Assertions
 import org.junit.jupiter.api.Test
 import org.springframework.ai.util.JacksonUtils
