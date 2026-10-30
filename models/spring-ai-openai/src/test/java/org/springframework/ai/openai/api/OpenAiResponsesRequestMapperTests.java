@@ -215,6 +215,28 @@ class OpenAiResponsesRequestMapperTests {
 	}
 
 	@Test
+	void mapsAssistantTextPartsToMessageContent() {
+		ObjectNode body = map("""
+				{"model":"gpt-test","stream":true,"messages":[{"role":"assistant","content":[
+				  {"type":"text","text":"Hello "},{"type":"text","text":"world"}]}]}
+				""");
+
+		assertJson(body.path("input"), """
+				[{"type":"message","role":"assistant","content":"Hello world"}]
+				""");
+	}
+
+	@Test
+	void rejectsNonTextAssistantContentParts() {
+		assertThatThrownBy(() -> map("""
+				{"model":"gpt-test","stream":true,"messages":[{"role":"assistant","content":[
+				  {"type":"image_url","image_url":{"url":"data:image/png;base64,AAA"}}]}]}
+				""")).isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("Assistant non-text content")
+			.hasMessageContaining("not supported by the OpenAI Responses API");
+	}
+
+	@Test
 	void rejectsAudioInput() {
 		assertThatThrownBy(() -> map("""
 				{"model":"gpt-test","stream":true,"messages":[{"role":"user","content":[

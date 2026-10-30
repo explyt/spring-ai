@@ -141,7 +141,7 @@ public final class OpenAiResponsesRequestMapper {
 		if (isSet(message.path("audio"))) {
 			throw unsupported("Assistant audio");
 		}
-		String text = textOf(message.path("content"));
+		String text = assistantText(message.path("content"));
 		if (!text.isEmpty()) {
 			messageItem(input, "assistant").put("content", text);
 		}
@@ -154,6 +154,20 @@ public final class OpenAiResponsesRequestMapper {
 				.put("name", function.path("name").asText(""))
 				.put("arguments", arguments.isBlank() ? "{}" : arguments);
 		}
+	}
+
+	private static String assistantText(JsonNode content) {
+		if (!content.isArray()) {
+			return content.asText("");
+		}
+		StringBuilder text = new StringBuilder();
+		for (JsonNode part : content) {
+			if (!"text".equals(part.path("type").asText(""))) {
+				throw unsupported("Assistant non-text content");
+			}
+			text.append(part.path("text").asText(""));
+		}
+		return text.toString();
 	}
 
 	private static void addToolOutput(ArrayNode input, JsonNode message) {
