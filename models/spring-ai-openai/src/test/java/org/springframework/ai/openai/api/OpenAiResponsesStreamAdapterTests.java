@@ -24,8 +24,10 @@ import reactor.core.publisher.Flux;
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionChunk;
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionFinishReason;
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.Role;
+import org.springframework.ai.retry.NonTransientAiException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Unit tests for {@link OpenAiResponsesStreamAdapter}: Responses API SSE events must be
@@ -184,6 +186,36 @@ class OpenAiResponsesStreamAdapterTests {
 				"{\"type\":\"error\",\"code\":\"rate_limit\",\"message\":\"slow down\"}", FAILED, "not json", "[DONE]");
 
 		assertThat(chunks).isEmpty();
+	}
+
+	private static final String ERROR_EVENT = "{\"type\":\"error\",\"sequence_number\":2,"
+			+ "\"code\":\"rate_limit_exceeded\",\"message\":\"slow down\"}";
+
+	private static List<ChatCompletionChunk> adaptFailingOnError(String... frames) {
+		return OpenAiResponsesStreamAdapter.toChatCompletionChunksFailingOnError(Flux.just(frames))
+			.collectList()
+			.block();
+	}
+
+	@Test
+	void failingVariantRaisesFailedEvent() {
+		assertThatThrownBy(() -> adaptFailingOnError(CREATED, TEXT_DELTA_1, FAILED))
+			.isInstanceOf(NonTransientAiException.class)
+			.hasMessageContaining("server_error")
+			.hasMessageContaining("boom");
+	}
+
+	@Test
+	void failingVariantRaisesErrorEvent() {
+		assertThatThrownBy(() -> adaptFailingOnError(CREATED, ERROR_EVENT)).isInstanceOf(NonTransientAiException.class)
+			.hasMessageContaining("rate_limit_exceeded")
+			.hasMessageContaining("slow down");
+	}
+
+	@Test
+	void failingVariantAdaptsSuccessfulStreamLikeTheLenientOne() {
+		assertThat(adaptFailingOnError(CREATED, TEXT_DELTA_1, TEXT_DELTA_2, COMPLETED))
+			.isEqualTo(adapt(CREATED, TEXT_DELTA_1, TEXT_DELTA_2, COMPLETED));
 	}
 
 }

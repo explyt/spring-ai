@@ -34,6 +34,7 @@ import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.ChatCom
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.Role;
 import org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage.ToolCall;
 import org.springframework.ai.openai.api.OpenAiApi.Usage;
+import org.springframework.ai.retry.NonTransientAiException;
 import org.springframework.util.StringUtils;
 
 /**
@@ -56,10 +57,12 @@ import org.springframework.util.StringUtils;
  * {@code stream_options.include_usage=true}), with Responses usage names translated to
  * Chat Completions ones.</li>
  * </ul>
- * {@code response.failed} and {@code error} events are logged and produce no typed chunk:
- * the raw branch forwards the provider frame to the client verbatim, mirroring the
- * Anthropic passthrough. Unknown event types are ignored. The adapter is stateful per
- * stream: obtain one through {@link #toChatCompletionChunks(Flux)}.
+ * {@code response.failed} and {@code error} events are logged and produce no typed chunk
+ * in {@link #toChatCompletionChunks(Flux)}, where the raw branch forwards the provider
+ * frame to the client verbatim; {@link #toChatCompletionChunksFailingOnError(Flux)}
+ * raises them as {@link NonTransientAiException} instead. Unknown event types are
+ * ignored. The adapter is stateful per stream: obtain one through
+ * {@link #toChatCompletionChunks(Flux)}.
  */
 public final class OpenAiResponsesStreamAdapter {
 
@@ -81,17 +84,36 @@ public final class OpenAiResponsesStreamAdapter {
 
 	private boolean sawFunctionCall;
 
-	private OpenAiResponsesStreamAdapter() {
+	private final boolean failOnErrorEvents;
+
+	private OpenAiResponsesStreamAdapter(boolean failOnErrorEvents) {
+		this.failOnErrorEvents = failOnErrorEvents;
 	}
 
 	/**
-	 * Converts Responses API SSE {@code data:} payloads into Chat Completions chunks.
+	 * Converts Responses API SSE {@code data:} payloads into Chat Completions chunks;
+	 * {@code response.failed} and {@code error} events are logged and dropped.
 	 * @param sseData the raw SSE {@code data:} payloads of one Responses stream.
 	 * @return the equivalent {@link ChatCompletionChunk} stream.
 	 */
 	public static Flux<ChatCompletionChunk> toChatCompletionChunks(Flux<String> sseData) {
+		return adapt(sseData, false);
+	}
+
+	/**
+	 * Converts Responses API SSE {@code data:} payloads into Chat Completions chunks and
+	 * terminates the stream with {@link NonTransientAiException} on a
+	 * {@code response.failed} or {@code error} event.
+	 * @param sseData the raw SSE {@code data:} payloads of one Responses stream.
+	 * @return the equivalent {@link ChatCompletionChunk} stream.
+	 */
+	public static Flux<ChatCompletionChunk> toChatCompletionChunksFailingOnError(Flux<String> sseData) {
+		return adapt(sseData, true);
+	}
+
+	private static Flux<ChatCompletionChunk> adapt(Flux<String> sseData, boolean failOnErrorEvents) {
 		return Flux.defer(() -> {
-			OpenAiResponsesStreamAdapter adapter = new OpenAiResponsesStreamAdapter();
+			OpenAiResponsesStreamAdapter adapter = new OpenAiResponsesStreamAdapter(failOnErrorEvents);
 			return sseData.concatMapIterable(adapter::onData);
 		});
 	}
@@ -133,20 +155,34 @@ public final class OpenAiResponsesStreamAdapter {
 				return terminalChunks(event.path("response"));
 			}
 			case "response.failed" -> {
-				JsonNode error = event.path("response").path("error");
-				logger.warn("Responses stream failed: code={} message={}", error.path("code").asText(null),
-						error.path("message").asText(null));
-				return List.of();
+				return onError(event.path("response").path("error"));
 			}
 			case "error" -> {
-				logger.warn("Responses stream error event: code={} message={}", event.path("code").asText(null),
-						event.path("message").asText(null));
-				return List.of();
+				return onError(event);
 			}
 			default -> {
 				return List.of();
 			}
 		}
+	}
+
+	private List<ChatCompletionChunk> onError(JsonNode error) {
+		String code = error.path("code").asText(null);
+		String message = error.path("message").asText(null);
+		if (this.failOnErrorEvents) {
+			throw failure(code, message);
+		}
+		logger.warn("Responses stream failed: code={} message={}", code, message);
+		return List.of();
+	}
+
+	static NonTransientAiException failure(String code, String message) {
+		return new NonTransientAiException("OpenAI Responses request failed: code=" + code + " message=" + message);
+	}
+
+	static String callId(JsonNode functionCallItem) {
+		String callId = functionCallItem.path("call_id").asText(null);
+		return StringUtils.hasText(callId) ? callId : functionCallItem.path("id").asText(null);
 	}
 
 	private void captureResponseHeader(JsonNode response) {
@@ -178,10 +214,7 @@ public final class OpenAiResponsesStreamAdapter {
 			return List.of();
 		}
 		this.sawFunctionCall = true;
-		String callId = item.path("call_id").asText(null);
-		if (!StringUtils.hasText(callId)) {
-			callId = item.path("id").asText(null);
-		}
+		String callId = callId(item);
 		String arguments = item.path("arguments").asText("");
 		ToolCall toolCall = new ToolCall(this.nextToolCallIndex++, callId, "function",
 				new ChatCompletionFunction(item.path("name").asText(null), arguments));
@@ -195,7 +228,8 @@ public final class OpenAiResponsesStreamAdapter {
 		List<ChatCompletionChunk> chunks = new ArrayList<>(2);
 		ChatCompletionMessage emptyDelta = new ChatCompletionMessage(null, roleForDelta(), null, null, null, null, null,
 				null, null, null);
-		chunks.add(chunk(List.of(new ChunkChoice(finishReason(response), 0, emptyDelta, null)), null));
+		chunks.add(chunk(List.of(new ChunkChoice(finishReason(response, this.sawFunctionCall), 0, emptyDelta, null)),
+				null));
 		Usage usage = toUsage(response);
 		if (usage != null) {
 			chunks.add(chunk(List.of(), usage));
@@ -203,7 +237,7 @@ public final class OpenAiResponsesStreamAdapter {
 		return chunks;
 	}
 
-	private ChatCompletionFinishReason finishReason(JsonNode response) {
+	static ChatCompletionFinishReason finishReason(JsonNode response, boolean sawFunctionCall) {
 		if ("incomplete".equals(response.path("status").asText(null))) {
 			String reason = response.path("incomplete_details").path("reason").asText("");
 			return switch (reason) {
@@ -212,7 +246,7 @@ public final class OpenAiResponsesStreamAdapter {
 				default -> ChatCompletionFinishReason.STOP;
 			};
 		}
-		return this.sawFunctionCall ? ChatCompletionFinishReason.TOOL_CALLS : ChatCompletionFinishReason.STOP;
+		return sawFunctionCall ? ChatCompletionFinishReason.TOOL_CALLS : ChatCompletionFinishReason.STOP;
 	}
 
 	/**
@@ -223,7 +257,7 @@ public final class OpenAiResponsesStreamAdapter {
 	 * {@code price}, {@code price_with_discount}) are taken from the usage object, or
 	 * from the response root when misplaced there.
 	 */
-	private static Usage toUsage(JsonNode response) {
+	static Usage toUsage(JsonNode response) {
 		JsonNode usage = response.path("usage");
 		if (!usage.isObject()) {
 			return null;
