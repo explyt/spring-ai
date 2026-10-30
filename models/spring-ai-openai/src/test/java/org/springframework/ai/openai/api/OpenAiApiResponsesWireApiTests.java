@@ -103,7 +103,7 @@ class OpenAiApiResponsesWireApiTests {
 		this.server.enqueue(sse(CREATED, TEXT_HEL, TEXT_LO, COMPLETED));
 
 		List<ChatCompletionChunk> chunks = responsesApi().build()
-			.chatCompletionStream(request(true))
+			.chatCompletionStream(request(true).streamOptions(ChatCompletionRequest.StreamOptions.INCLUDE_USAGE))
 			.collectList()
 			.block();
 
@@ -116,6 +116,20 @@ class OpenAiApiResponsesWireApiTests {
 		assertThat(sent.path("input").get(0).path("content").asText()).isEqualTo("Hi");
 		assertThat(text(chunks)).isEqualTo("Hello");
 		assertThat(totalTokens(chunks)).isEqualTo(21);
+	}
+
+	@Test
+	void streamDropsUsageOnlyChunkWhenUsageWasNotRequested() {
+		this.server.enqueue(sse(CREATED, TEXT_HEL, TEXT_LO, COMPLETED));
+
+		List<ChatCompletionChunk> chunks = responsesApi().build()
+			.chatCompletionStream(request(true))
+			.collectList()
+			.block();
+
+		assertThat(chunks).isNotEmpty();
+		assertThat(text(chunks)).isEqualTo("Hello");
+		assertThat(chunks).allSatisfy(chunk -> assertThat(chunk.usage()).isNull());
 	}
 
 	@Test

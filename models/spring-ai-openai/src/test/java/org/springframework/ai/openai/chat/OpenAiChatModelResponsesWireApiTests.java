@@ -43,6 +43,8 @@ import static org.springframework.ai.openai.api.ResponsesApiFixtures.CALL_PARIS_
 import static org.springframework.ai.openai.api.ResponsesApiFixtures.COMPLETED;
 import static org.springframework.ai.openai.api.ResponsesApiFixtures.CREATED;
 import static org.springframework.ai.openai.api.ResponsesApiFixtures.RESPONSE_OBJECT;
+import static org.springframework.ai.openai.api.ResponsesApiFixtures.TEXT_HEL;
+import static org.springframework.ai.openai.api.ResponsesApiFixtures.TEXT_LO;
 import static org.springframework.ai.openai.api.ResponsesApiFixtures.TEXT_SUNNY;
 import static org.springframework.ai.openai.api.ResponsesApiFixtures.body;
 import static org.springframework.ai.openai.api.ResponsesApiFixtures.json;
@@ -118,6 +120,18 @@ class OpenAiChatModelResponsesWireApiTests {
 		assertThat(input.get(2).path("call_id").asText()).isEqualTo("call_1");
 		assertThat(input.get(2).path("output").asText()).contains("Sunny in Paris");
 		assertThat(text(responses)).isEqualTo("Sunny");
+	}
+
+	@Test
+	void streamWithoutStreamUsageDoesNotEmitUsageOnlyResponse() {
+		this.server.enqueue(sse(CREATED, TEXT_HEL, TEXT_LO, COMPLETED));
+		OpenAiChatOptions options = OpenAiChatOptions.builder().model("gpt-test").build();
+
+		List<ChatResponse> responses = chatModel(options).stream(new Prompt("Hi")).collectList().block();
+
+		assertThat(responses).isNotEmpty();
+		assertThat(text(responses)).isEqualTo("Hello");
+		assertThat(responses).allSatisfy(response -> assertThat(response.getResult()).isNotNull());
 	}
 
 	@Test

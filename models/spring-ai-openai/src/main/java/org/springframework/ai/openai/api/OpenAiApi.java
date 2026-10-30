@@ -553,7 +553,16 @@ public class OpenAiApi {
 			.bodyToFlux(String.class);
 		// @formatter:on
 		return OpenAiResponsesStreamAdapter.toChatCompletionChunksFailingOnError(sseData)
-			.transform(this::mergeToolCallWindows);
+			.transform(this::mergeToolCallWindows)
+			.filter(chunk -> requestsUsage(chatRequest) || !isUsageOnly(chunk));
+	}
+
+	private static boolean requestsUsage(ChatCompletionRequest request) {
+		return request.streamOptions() != null && Boolean.TRUE.equals(request.streamOptions().includeUsage());
+	}
+
+	private static boolean isUsageOnly(ChatCompletionChunk chunk) {
+		return chunk.usage() != null && CollectionUtils.isEmpty(chunk.choices());
 	}
 
 	private String responsesRequestBody(ChatCompletionRequest chatRequest) {
