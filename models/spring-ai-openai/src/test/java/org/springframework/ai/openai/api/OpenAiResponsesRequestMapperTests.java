@@ -138,6 +138,17 @@ class OpenAiResponsesRequestMapperTests {
 	}
 
 	@Test
+	void rejectsToolChoiceObjectsOtherThanNamedFunction() {
+		assertThatThrownBy(() -> map("""
+				{"model":"gpt-test","stream":true,"messages":[{"role":"user","content":"Hi"}],
+				 "tool_choice":{"type":"allowed_tools","allowed_tools":{"mode":"required",
+				   "tools":[{"type":"function","function":{"name":"weather"}}]}}}
+				""")).isInstanceOf(IllegalArgumentException.class)
+			.hasMessageContaining("'tool_choice' of type 'allowed_tools'")
+			.hasMessageContaining("not supported by the OpenAI Responses API");
+	}
+
+	@Test
 	void flattensNamedToolChoice() {
 		ObjectNode body = map("""
 				{"model":"gpt-test","stream":true,"tool_choice":{"type":"function","function":{"name":"weather"}},

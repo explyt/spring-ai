@@ -205,6 +205,9 @@ public final class OpenAiResponsesRequestMapper {
 		if (functionName.isString()) {
 			body.putObject("tool_choice").put("type", "function").put("name", functionName.asText());
 		}
+		else if (toolChoice.isObject()) {
+			throw unsupported("'tool_choice' of type '" + toolChoice.path("type").asText("") + "'");
+		}
 		else {
 			putIfPresent(body, "tool_choice", toolChoice);
 		}
