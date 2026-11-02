@@ -47,6 +47,7 @@ import static org.springframework.ai.openai.api.ResponsesApiFixtures.CHAT_COMPLE
 import static org.springframework.ai.openai.api.ResponsesApiFixtures.COMPLETED;
 import static org.springframework.ai.openai.api.ResponsesApiFixtures.CREATED;
 import static org.springframework.ai.openai.api.ResponsesApiFixtures.FAILED;
+import static org.springframework.ai.openai.api.ResponsesApiFixtures.INCOMPLETE_MAX_OUTPUT_TOKENS;
 import static org.springframework.ai.openai.api.ResponsesApiFixtures.RESPONSE_OBJECT;
 import static org.springframework.ai.openai.api.ResponsesApiFixtures.TEXT_HEL;
 import static org.springframework.ai.openai.api.ResponsesApiFixtures.TEXT_LO;
@@ -145,6 +146,38 @@ class OpenAiApiResponsesWireApiTests {
 		assertThat(toolCalls.choices().get(0).finishReason()).isEqualTo(ChatCompletionFinishReason.TOOL_CALLS);
 		assertThat(toolCalls.choices().get(0).delta().toolCalls()).extracting(ToolCall::id)
 			.containsExactly("call_1", "call_2");
+	}
+
+	@Test
+	void streamClosesToolWindowOnIncompleteFinishAndDropsUnrequestedUsage() {
+		this.server.enqueue(sse(CREATED, CALL_PARIS_DONE, INCOMPLETE_MAX_OUTPUT_TOKENS));
+
+		List<ChatCompletionChunk> chunks = responsesApi().build()
+			.chatCompletionStream(request(true))
+			.collectList()
+			.block();
+
+		assertThat(chunks).hasSize(1);
+		assertThat(chunks.get(0).choices().get(0).finishReason()).isEqualTo(ChatCompletionFinishReason.LENGTH);
+		assertThat(chunks.get(0).choices().get(0).delta().toolCalls()).extracting(ToolCall::id)
+			.containsExactly("call_1");
+		assertThat(chunks.get(0).usage()).isNull();
+	}
+
+	@Test
+	void streamKeepsRequestedUsageSeparateAfterIncompleteToolWindow() {
+		this.server.enqueue(sse(CREATED, CALL_PARIS_DONE, INCOMPLETE_MAX_OUTPUT_TOKENS));
+
+		List<ChatCompletionChunk> chunks = responsesApi().build()
+			.chatCompletionStream(request(true).streamOptions(ChatCompletionRequest.StreamOptions.INCLUDE_USAGE))
+			.collectList()
+			.block();
+
+		assertThat(chunks).hasSize(2);
+		assertThat(chunks.get(0).choices().get(0).finishReason()).isEqualTo(ChatCompletionFinishReason.LENGTH);
+		assertThat(chunks.get(0).usage()).isNull();
+		assertThat(chunks.get(1).choices()).isEmpty();
+		assertThat(chunks.get(1).usage().totalTokens()).isEqualTo(3);
 	}
 
 	@Test

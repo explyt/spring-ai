@@ -498,6 +498,11 @@ public class OpenAiApi {
 	}
 
 	private Flux<ChatCompletionChunk> mergeToolCallWindows(Flux<ChatCompletionChunk> chunks) {
+		return mergeToolCallWindows(chunks, this.chunkMerger::isStreamingToolFunctionCallFinish);
+	}
+
+	private Flux<ChatCompletionChunk> mergeToolCallWindows(Flux<ChatCompletionChunk> chunks,
+			Predicate<ChatCompletionChunk> closesToolWindow) {
 		AtomicBoolean isInsideTool = new AtomicBoolean(false);
 		// @formatter:off
 		return chunks
@@ -508,7 +513,7 @@ public class OpenAiApi {
 				return chunk;
 			})
 			.windowUntil(chunk -> {
-				if (isInsideTool.get() && this.chunkMerger.isStreamingToolFunctionCallFinish(chunk)) {
+				if (isInsideTool.get() && closesToolWindow.test(chunk)) {
 					isInsideTool.set(false);
 					return true;
 				}
@@ -553,8 +558,12 @@ public class OpenAiApi {
 			.bodyToFlux(String.class);
 		// @formatter:on
 		return OpenAiResponsesStreamAdapter.toChatCompletionChunksFailingOnError(sseData)
-			.transform(this::mergeToolCallWindows)
+			.transform(chunks -> mergeToolCallWindows(chunks, OpenAiApi::hasFinishReason))
 			.filter(chunk -> requestsUsage(chatRequest) || !isUsageOnly(chunk));
+	}
+
+	private static boolean hasFinishReason(ChatCompletionChunk chunk) {
+		return !CollectionUtils.isEmpty(chunk.choices()) && chunk.choices().get(0).finishReason() != null;
 	}
 
 	private static boolean requestsUsage(ChatCompletionRequest request) {

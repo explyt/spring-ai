@@ -47,6 +47,9 @@ public final class ResponsesApiFixtures {
 	public static final String COMPLETED = """
 			{"type":"response.completed","response":{"id":"resp_1","created_at":1700000000,"model":"gpt-test","status":"completed","output":[],"usage":{"input_tokens":9,"output_tokens":12,"total_tokens":21}}}""";
 
+	public static final String INCOMPLETE_MAX_OUTPUT_TOKENS = """
+			{"type":"response.incomplete","response":{"id":"resp_1","created_at":1700000000,"model":"gpt-test","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[],"usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}}""";
+
 	public static final String FAILED = """
 			{"type":"response.failed","response":{"id":"resp_1","status":"failed","error":{"code":"server_error","message":"boom"}}}""";
 
