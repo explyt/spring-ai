@@ -78,6 +78,8 @@ public final class OpenAiResponsesStreamAdapter {
 
 	private Long createdAt;
 
+	private String serviceTier;
+
 	private boolean roleSent;
 
 	private int nextToolCallIndex;
@@ -198,6 +200,10 @@ public final class OpenAiResponsesStreamAdapter {
 		if (created.isNumber()) {
 			this.createdAt = created.asLong();
 		}
+		String responseServiceTier = response.path("service_tier").asText(null);
+		if (StringUtils.hasText(responseServiceTier)) {
+			this.serviceTier = responseServiceTier;
+		}
 	}
 
 	private List<ChatCompletionChunk> deltaChunk(String content, String refusal, String reasoning) {
@@ -309,8 +315,8 @@ public final class OpenAiResponsesStreamAdapter {
 	}
 
 	private ChatCompletionChunk chunk(List<ChunkChoice> choices, Usage usage) {
-		return new ChatCompletionChunk(this.responseId, choices, this.createdAt, this.model, null, null, CHUNK_OBJECT,
-				usage);
+		return new ChatCompletionChunk(this.responseId, choices, this.createdAt, this.model, this.serviceTier, null,
+				CHUNK_OBJECT, usage);
 	}
 
 }

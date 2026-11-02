@@ -92,6 +92,15 @@ class OpenAiResponsesCompletionAdapterTests {
 	}
 
 	@Test
+	void mapsEffectiveServiceTier() {
+		ChatCompletion completion = toChatCompletion("""
+				{"id":"resp_5","model":"gpt-test","status":"completed","service_tier":"default","output":[]}
+				""");
+
+		assertThat(completion.serviceTier()).isEqualTo("default");
+	}
+
+	@Test
 	void raisesFailedResponse() {
 		assertThatThrownBy(() -> toChatCompletion("""
 				{"id":"resp_4","status":"failed","error":{"code":"server_error","message":"boom"},"output":[]}

@@ -213,6 +213,20 @@ class OpenAiResponsesStreamAdapterTests {
 	}
 
 	@Test
+	void chunksCarryLatestServiceTier() {
+		String created = """
+				{"type":"response.created","response":{"id":"resp_1","model":"gpt-test","status":"in_progress","service_tier":"auto","output":[]}}""";
+		String completed = """
+				{"type":"response.completed","response":{"id":"resp_1","model":"gpt-test","status":"completed","service_tier":"default","output":[],"usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}}}""";
+
+		List<ChatCompletionChunk> chunks = adapt(created, TEXT_DELTA_1, completed);
+
+		assertThat(chunks).hasSize(3);
+		assertThat(chunks.get(0).serviceTier()).isEqualTo("auto");
+		assertThat(chunks.get(2).serviceTier()).isEqualTo("default");
+	}
+
+	@Test
 	void failingVariantAdaptsSuccessfulStreamLikeTheLenientOne() {
 		assertThat(adaptFailingOnError(CREATED, TEXT_DELTA_1, TEXT_DELTA_2, COMPLETED))
 			.isEqualTo(adapt(CREATED, TEXT_DELTA_1, TEXT_DELTA_2, COMPLETED));

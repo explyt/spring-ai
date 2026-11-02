@@ -77,8 +77,9 @@ public final class OpenAiResponsesCompletionAdapter {
 				message, null);
 		JsonNode createdAt = response.path("created_at");
 		return new ChatCompletion(response.path("id").asText(null), List.of(choice),
-				createdAt.isNumber() ? createdAt.asLong() : null, response.path("model").asText(null), null, null,
-				"chat.completion", OpenAiResponsesStreamAdapter.toUsage(response));
+				createdAt.isNumber() ? createdAt.asLong() : null, response.path("model").asText(null),
+				response.path("service_tier").asText(null), null, "chat.completion",
+				OpenAiResponsesStreamAdapter.toUsage(response));
 	}
 
 	private static void appendMessageParts(JsonNode item, StringBuilder text, StringBuilder refusal) {
