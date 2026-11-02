@@ -36,6 +36,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import tools.jackson.databind.annotation.JsonDeserialize;
+import tools.jackson.databind.node.ObjectNode;
 
 import org.springframework.ai.model.ApiKey;
 import org.springframework.ai.model.ChatModelDescription;
@@ -574,8 +575,8 @@ public class OpenAiApi {
 		return chunk.usage() != null && CollectionUtils.isEmpty(chunk.choices());
 	}
 
-	private String responsesRequestBody(ChatCompletionRequest chatRequest) {
-		return OpenAiResponsesRequestMapper.toResponsesRequest(chatRequest, this.reasoningSummary).toString();
+	private ObjectNode responsesRequestBody(ChatCompletionRequest chatRequest) {
+		return OpenAiResponsesRequestMapper.toResponsesRequest(chatRequest, this.reasoningSummary);
 	}
 
 	/**
