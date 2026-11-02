@@ -36,6 +36,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import tools.jackson.databind.annotation.JsonDeserialize;
+import tools.jackson.databind.node.ObjectNode;
 
 import org.springframework.ai.model.ApiKey;
 import org.springframework.ai.model.ChatModelDescription;
@@ -114,6 +115,10 @@ public class OpenAiApi {
 
 	private final String responsesPath;
 
+	private final OpenAiWireApi wireApi;
+
+	private final String reasoningSummary;
+
 	private final ResponseErrorHandler responseErrorHandler;
 
 	private final RestClient restClient;
@@ -156,7 +161,8 @@ public class OpenAiApi {
 	 * @param headers the http headers to use.
 	 * @param completionsPath the path to the chat completions endpoint.
 	 * @param embeddingsPath the path to the embeddings endpoint.
-	 * @param responsesPath the path to the Responses API endpoint (raw passthrough only).
+	 * @param responsesPath the path to the Responses API endpoint (raw passthrough and
+	 * the {@link OpenAiWireApi#RESPONSES} dialect).
 	 * @param restClientBuilder RestClient builder.
 	 * @param webClientBuilder WebClient builder.
 	 * @param responseErrorHandler Response error handler.
@@ -164,17 +170,43 @@ public class OpenAiApi {
 	public OpenAiApi(String baseUrl, ApiKey apiKey, HttpHeaders headers, String completionsPath, String embeddingsPath,
 			String responsesPath, RestClient.Builder restClientBuilder, WebClient.Builder webClientBuilder,
 			ResponseErrorHandler responseErrorHandler) {
+		this(baseUrl, apiKey, headers, completionsPath, embeddingsPath, responsesPath, OpenAiWireApi.CHAT_COMPLETIONS,
+				null, restClientBuilder, webClientBuilder, responseErrorHandler);
+	}
+
+	/**
+	 * Create a new chat completion api.
+	 * @param baseUrl api base URL.
+	 * @param apiKey OpenAI apiKey.
+	 * @param headers the http headers to use.
+	 * @param completionsPath the path to the chat completions endpoint.
+	 * @param embeddingsPath the path to the embeddings endpoint.
+	 * @param responsesPath the path to the Responses API endpoint (raw passthrough and
+	 * the {@link OpenAiWireApi#RESPONSES} dialect).
+	 * @param wireApi the dialect used for chat requests.
+	 * @param reasoningSummary the {@code reasoning.summary} requested on the Responses
+	 * dialect, or {@code null}.
+	 * @param restClientBuilder RestClient builder.
+	 * @param webClientBuilder WebClient builder.
+	 * @param responseErrorHandler Response error handler.
+	 */
+	public OpenAiApi(String baseUrl, ApiKey apiKey, HttpHeaders headers, String completionsPath, String embeddingsPath,
+			String responsesPath, OpenAiWireApi wireApi, String reasoningSummary, RestClient.Builder restClientBuilder,
+			WebClient.Builder webClientBuilder, ResponseErrorHandler responseErrorHandler) {
 		this.baseUrl = baseUrl;
 		this.apiKey = apiKey;
 		this.headers = headers;
 		this.completionsPath = completionsPath;
 		this.embeddingsPath = embeddingsPath;
 		this.responsesPath = responsesPath;
+		this.wireApi = wireApi;
+		this.reasoningSummary = reasoningSummary;
 		this.responseErrorHandler = responseErrorHandler;
 
 		Assert.hasText(completionsPath, "Completions Path must not be null");
 		Assert.hasText(embeddingsPath, "Embeddings Path must not be null");
 		Assert.hasText(responsesPath, "Responses Path must not be null");
+		Assert.notNull(wireApi, "Wire API must not be null");
 		Assert.notNull(headers, "Headers must not be null");
 
 		// @formatter:off
@@ -214,6 +246,8 @@ public class OpenAiApi {
 		this.completionsPath = completionsPath;
 		this.embeddingsPath = embeddingsPath;
 		this.responsesPath = DEFAULT_RESPONSES_PATH;
+		this.wireApi = OpenAiWireApi.CHAT_COMPLETIONS;
+		this.reasoningSummary = null;
 		this.responseErrorHandler = responseErrorHandler;
 		this.restClient = restClient;
 		this.webClient = webClient;
@@ -259,6 +293,10 @@ public class OpenAiApi {
 		Assert.notNull(chatRequest, REQUEST_BODY_NULL_MESSAGE);
 		Assert.isTrue(!chatRequest.stream(), STREAM_FALSE_MESSAGE);
 		Assert.notNull(additionalHttpHeader, ADDITIONAL_HEADERS_NULL_MESSAGE);
+
+		if (this.wireApi == OpenAiWireApi.RESPONSES) {
+			return responsesEntity(chatRequest, additionalHttpHeader);
+		}
 
 		// @formatter:off
 		return this.restClient.post()
@@ -326,7 +364,9 @@ public class OpenAiApi {
 		Assert.notNull(chatRequest, REQUEST_BODY_NULL_MESSAGE);
 		Assert.isTrue(chatRequest.stream(), "Request must set the stream property to true.");
 
-		AtomicBoolean isInsideTool = new AtomicBoolean(false);
+		if (this.wireApi == OpenAiWireApi.RESPONSES) {
+			return responsesStream(chatRequest, additionalHttpHeader);
+		}
 
 		// @formatter:off
 		return this.webClient.post()
@@ -341,34 +381,7 @@ public class OpenAiApi {
 			// filters out the "[DONE]" message.
 			.filter(SSE_DONE_PREDICATE.negate())
 			.map(parser)
-			// Detect is the chunk is part of a streaming function call.
-			.map(chunk -> {
-				if (this.chunkMerger.isStreamingToolFunctionCall(chunk)) {
-					isInsideTool.set(true);
-				}
-				return chunk;
-			})
-			// Group all chunks belonging to the same function call.
-			// Flux<ChatCompletionChunk> -> Flux<Flux<ChatCompletionChunk>>
-			.windowUntil(chunk -> {
-				if (isInsideTool.get() && this.chunkMerger.isStreamingToolFunctionCallFinish(chunk)) {
-					isInsideTool.set(false);
-					return true;
-				}
-				return !isInsideTool.get();
-			})
-			// Merging the window chunks into a single chunk.
-			// Reduce the inner Flux<ChatCompletionChunk> window into a single
-			// Mono<ChatCompletionChunk>,
-			// Flux<Flux<ChatCompletionChunk>> -> Flux<Mono<ChatCompletionChunk>>
-			.concatMapIterable(window -> {
-				Mono<ChatCompletionChunk> monoChunk = window.reduce(
-						new ChatCompletionChunk(null, null, null, null, null, null, null, null),
-						(previous, current) -> this.chunkMerger.merge(previous, current));
-				return List.of(monoChunk);
-			})
-			// Flux<Mono<ChatCompletionChunk>> -> Flux<ChatCompletionChunk>
-			.flatMap(mono -> mono);
+			.transform(this::mergeToolCallWindows);
 	}
 
 	/**
@@ -473,9 +486,6 @@ public class OpenAiApi {
 	 * @return a {@link Flux} stream from chat completion chunks.
 	 */
 	public Flux<ChatCompletionChunk> parseChatCompletionChunks(Flux<String> sseData) {
-
-		AtomicBoolean isInsideTool = new AtomicBoolean(false);
-
 		// @formatter:off
 		return sseData
 			// Do NOT takeUntil("[DONE]"): cancelling on the sentinel closes the
@@ -483,36 +493,90 @@ public class OpenAiApi {
 			// the typed chatCompletionStream above relies on, and making the gateway
 			// drop TLS handshakes under load. Just filter [DONE] and drain to EOF.
 			.filter(SSE_DONE_PREDICATE.negate())
-			.map(parser)
-			// Detect is the chunk is part of a streaming function call.
+			.map(this.parser)
+			.transform(this::mergeToolCallWindows);
+		// @formatter:on
+	}
+
+	private Flux<ChatCompletionChunk> mergeToolCallWindows(Flux<ChatCompletionChunk> chunks) {
+		return mergeToolCallWindows(chunks, this.chunkMerger::isStreamingToolFunctionCallFinish);
+	}
+
+	private Flux<ChatCompletionChunk> mergeToolCallWindows(Flux<ChatCompletionChunk> chunks,
+			Predicate<ChatCompletionChunk> closesToolWindow) {
+		AtomicBoolean isInsideTool = new AtomicBoolean(false);
+		// @formatter:off
+		return chunks
 			.map(chunk -> {
 				if (this.chunkMerger.isStreamingToolFunctionCall(chunk)) {
 					isInsideTool.set(true);
 				}
 				return chunk;
 			})
-			// Group all chunks belonging to the same function call.
-			// Flux<ChatCompletionChunk> -> Flux<Flux<ChatCompletionChunk>>
 			.windowUntil(chunk -> {
-				if (isInsideTool.get() && this.chunkMerger.isStreamingToolFunctionCallFinish(chunk)) {
+				if (isInsideTool.get() && closesToolWindow.test(chunk)) {
 					isInsideTool.set(false);
 					return true;
 				}
 				return !isInsideTool.get();
 			})
-			// Merging the window chunks into a single chunk.
-			// Reduce the inner Flux<ChatCompletionChunk> window into a single
-			// Mono<ChatCompletionChunk>,
-			// Flux<Flux<ChatCompletionChunk>> -> Flux<Mono<ChatCompletionChunk>>
-			.concatMapIterable(window -> {
-				Mono<ChatCompletionChunk> monoChunk = window.reduce(
-						new ChatCompletionChunk(null, null, null, null, null, null, null, null),
-						(previous, current) -> this.chunkMerger.merge(previous, current));
-				return List.of(monoChunk);
-			})
-			// Flux<Mono<ChatCompletionChunk>> -> Flux<ChatCompletionChunk>
+			.concatMapIterable(window -> List.of(window.reduce(
+					new ChatCompletionChunk(null, null, null, null, null, null, null, null),
+					(previous, current) -> this.chunkMerger.merge(previous, current))))
 			.flatMap(mono -> mono);
 		// @formatter:on
+	}
+
+	private ResponseEntity<ChatCompletion> responsesEntity(ChatCompletionRequest chatRequest,
+			HttpHeaders additionalHttpHeader) {
+		// @formatter:off
+		ResponseEntity<String> entity = this.restClient.post()
+			.uri(this.responsesPath)
+			.headers(headers -> {
+				headers.addAll(additionalHttpHeader);
+				addDefaultHeadersIfMissing(headers);
+			})
+			.body(responsesRequestBody(chatRequest))
+			.retrieve()
+			.toEntity(String.class);
+		// @formatter:on
+		ChatCompletion completion = entity.getBody() == null ? null
+				: OpenAiResponsesCompletionAdapter.toChatCompletion(entity.getBody());
+		return new ResponseEntity<>(completion, entity.getHeaders(), entity.getStatusCode());
+	}
+
+	private Flux<ChatCompletionChunk> responsesStream(ChatCompletionRequest chatRequest,
+			HttpHeaders additionalHttpHeader) {
+		// @formatter:off
+		Flux<String> sseData = this.webClient.post()
+			.uri(this.responsesPath)
+			.headers(headers -> {
+				headers.addAll(additionalHttpHeader);
+				addDefaultHeadersIfMissing(headers);
+			})
+			.bodyValue(responsesRequestBody(chatRequest))
+			.retrieve()
+			.bodyToFlux(String.class);
+		// @formatter:on
+		return OpenAiResponsesStreamAdapter.toChatCompletionChunksFailingOnError(sseData)
+			.transform(chunks -> mergeToolCallWindows(chunks, OpenAiApi::hasFinishReason))
+			.filter(chunk -> requestsUsage(chatRequest) || !isUsageOnly(chunk));
+	}
+
+	private static boolean hasFinishReason(ChatCompletionChunk chunk) {
+		return !CollectionUtils.isEmpty(chunk.choices()) && chunk.choices().get(0).finishReason() != null;
+	}
+
+	private static boolean requestsUsage(ChatCompletionRequest request) {
+		return request.streamOptions() != null && Boolean.TRUE.equals(request.streamOptions().includeUsage());
+	}
+
+	private static boolean isUsageOnly(ChatCompletionChunk chunk) {
+		return chunk.usage() != null && CollectionUtils.isEmpty(chunk.choices());
+	}
+
+	private ObjectNode responsesRequestBody(ChatCompletionRequest chatRequest) {
+		return OpenAiResponsesRequestMapper.toResponsesRequest(chatRequest, this.reasoningSummary);
 	}
 
 	/**
@@ -599,6 +663,14 @@ public class OpenAiApi {
 
 	String getResponsesPath() {
 		return this.responsesPath;
+	}
+
+	OpenAiWireApi getWireApi() {
+		return this.wireApi;
+	}
+
+	String getReasoningSummary() {
+		return this.reasoningSummary;
 	}
 
 	ResponseErrorHandler getResponseErrorHandler() {
@@ -2311,6 +2383,8 @@ public class OpenAiApi {
 			this.completionsPath = api.getCompletionsPath();
 			this.embeddingsPath = api.getEmbeddingsPath();
 			this.responsesPath = api.getResponsesPath();
+			this.wireApi = api.getWireApi();
+			this.reasoningSummary = api.getReasoningSummary();
 			this.restClientBuilder = api.restClient != null ? api.restClient.mutate() : RestClient.builder();
 			this.webClientBuilder = api.webClient != null ? api.webClient.mutate() : WebClient.builder();
 			this.responseErrorHandler = api.getResponseErrorHandler();
@@ -2327,6 +2401,10 @@ public class OpenAiApi {
 		private String embeddingsPath = "/v1/embeddings";
 
 		private String responsesPath = DEFAULT_RESPONSES_PATH;
+
+		private OpenAiWireApi wireApi = OpenAiWireApi.CHAT_COMPLETIONS;
+
+		private String reasoningSummary;
 
 		private RestClient.Builder restClientBuilder = RestClient.builder();
 
@@ -2375,6 +2453,17 @@ public class OpenAiApi {
 			return this;
 		}
 
+		public Builder wireApi(OpenAiWireApi wireApi) {
+			Assert.notNull(wireApi, "wireApi cannot be null");
+			this.wireApi = wireApi;
+			return this;
+		}
+
+		public Builder reasoningSummary(String reasoningSummary) {
+			this.reasoningSummary = reasoningSummary;
+			return this;
+		}
+
 		public Builder restClientBuilder(RestClient.Builder restClientBuilder) {
 			Assert.notNull(restClientBuilder, "restClientBuilder cannot be null");
 			this.restClientBuilder = restClientBuilder;
@@ -2396,7 +2485,8 @@ public class OpenAiApi {
 		public OpenAiApi build() {
 			Assert.notNull(this.apiKey, "apiKey must be set");
 			return new OpenAiApi(this.baseUrl, this.apiKey, this.headers, this.completionsPath, this.embeddingsPath,
-					this.responsesPath, this.restClientBuilder, this.webClientBuilder, this.responseErrorHandler);
+					this.responsesPath, this.wireApi, this.reasoningSummary, this.restClientBuilder,
+					this.webClientBuilder, this.responseErrorHandler);
 		}
 
 	}
