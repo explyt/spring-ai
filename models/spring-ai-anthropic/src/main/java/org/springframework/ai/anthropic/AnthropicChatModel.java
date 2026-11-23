@@ -22,7 +22,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -419,7 +418,7 @@ public class AnthropicChatModel implements ChatModel {
 			// TYPED branch: run the identical parse + usage pipeline as the normal
 			// streaming path (no tool execution in raw mode, no previous response).
 			Flux<ChatCompletionResponse> response = this.anthropicApi.parseChatCompletionStream(
-					connectable.map(org.springframework.http.codec.ServerSentEvent::data).filter(Objects::nonNull));
+					connectable.mapNotNull(org.springframework.http.codec.ServerSentEvent::data));
 			Flux<DualStreamItem> typedItems = response.map(chatCompletionResponse -> {
 				AnthropicApi.Usage usage = chatCompletionResponse.usage();
 				Usage currentChatResponseUsage = usage != null ? this.getDefaultUsage(chatCompletionResponse.usage())
