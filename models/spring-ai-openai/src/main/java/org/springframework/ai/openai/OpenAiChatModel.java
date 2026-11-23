@@ -471,7 +471,7 @@ public class OpenAiChatModel implements ChatModel {
 			// pipeline as the normal streaming path. rawBody is non-null here, so usage
 			// accumulation is gated on. No tool execution in raw mode.
 			Flux<OpenAiApi.ChatCompletionChunk> completionChunks = parser
-				.apply(connectable.map(org.springframework.http.codec.ServerSentEvent::data).filter(Objects::nonNull));
+				.apply(connectable.mapNotNull(org.springframework.http.codec.ServerSentEvent::data));
 			Flux<DualStreamItem> typedItems = mapChunksToChatResponses(completionChunks, request, true, null)
 				.map(DualStreamItem.TypedChunk::new);
 

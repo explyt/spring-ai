@@ -175,4 +175,101 @@ public class OpenAiChatModelStreamRawPassthroughResponsesTests {
 		assertThat(sent.get("x_unknown").asInt()).isEqualTo(1);
 	}
 
+	/**
+	 * Regression test for enterprise-team-board#472: a comment-only SSE frame
+	 * ({@code : keepalive}, no {@code data:} field, so {@code data()} is null) between
+	 * the Responses events used to kill the whole shared stream, because the typed branch
+	 * mapped {@code ServerSentEvent::data} with Reactor {@code map}, which throws
+	 * {@code NullPointerException("The mapper [...] returned a null value.")} before any
+	 * downstream filter can drop the null. The typed branch must skip the frame and the
+	 * raw branch must still forward it (as a {@code RawFrame} with null data).
+	 */
+	@Test
+	void commentOnlyKeepaliveFrameDoesNotKillTheStream() {
+		ServerSentEvent<String> keepalive = ServerSentEvent.<String>builder().comment("keepalive").build();
+		assertThat(keepalive.data()).isNull();
+		setupChatModel(Flux.just(sse("response.created", CREATED), keepalive,
+				sse("response.output_text.delta", TEXT_DELTA), sse("response.completed", COMPLETED)));
+
+		List<DualStreamItem> items = this.chatModel
+			.streamRawPassthroughResponses(new Prompt("test"), "{\"input\":\"hi\"}")
+			.collectList()
+			.block();
+
+		assertDataLessFrameIsSkippedByTypedAndForwardedByRaw(items, 1);
+		assertThat(rawFrames(items).get(1).event()).isNull();
+	}
+
+	/**
+	 * Regression test for enterprise-team-board#472: an event-only SSE frame
+	 * ({@code event: ping} with no {@code data:} field, so {@code data()} is null) used
+	 * to kill the whole shared stream through the Reactor {@code map} null-mapper
+	 * {@code NullPointerException} in the typed branch. The typed branch must skip the
+	 * frame and the raw branch must still forward it with its event name.
+	 */
+	@Test
+	void eventOnlyFrameWithoutDataDoesNotKillTheStream() {
+		ServerSentEvent<String> ping = ServerSentEvent.<String>builder().event("ping").build();
+		assertThat(ping.data()).isNull();
+		setupChatModel(Flux.just(sse("response.created", CREATED), ping, sse("response.output_text.delta", TEXT_DELTA),
+				sse("response.completed", COMPLETED)));
+
+		List<DualStreamItem> items = this.chatModel
+			.streamRawPassthroughResponses(new Prompt("test"), "{\"input\":\"hi\"}")
+			.collectList()
+			.block();
+
+		assertDataLessFrameIsSkippedByTypedAndForwardedByRaw(items, 1);
+		assertThat(rawFrames(items).get(1).event()).isEqualTo("ping");
+	}
+
+	private static List<DualStreamItem.RawFrame> rawFrames(List<DualStreamItem> items) {
+		return items.stream()
+			.filter(DualStreamItem.RawFrame.class::isInstance)
+			.map(DualStreamItem.RawFrame.class::cast)
+			.toList();
+	}
+
+	/**
+	 * Asserts the stream completed (we got here, so {@code block()} did not throw), the
+	 * RAW branch forwarded every frame in order - the data-less one at
+	 * {@code dataLessIndex} as a {@code RawFrame} with null data, which is the current,
+	 * unchanged behaviour of the raw branch - and the TYPED branch still produced the
+	 * same content and usage as the happy-path test.
+	 */
+	private static void assertDataLessFrameIsSkippedByTypedAndForwardedByRaw(List<DualStreamItem> items,
+			int dataLessIndex) {
+		assertThat(items).isNotEmpty();
+
+		List<DualStreamItem.RawFrame> rawFrames = rawFrames(items);
+		assertThat(rawFrames).hasSize(4);
+		assertThat(rawFrames.get(dataLessIndex).data()).isNull();
+		List<DualStreamItem.RawFrame> dataBearing = rawFrames.stream().filter(f -> f.data() != null).toList();
+		assertThat(dataBearing).extracting(DualStreamItem.RawFrame::event)
+			.containsExactly("response.created", "response.output_text.delta", "response.completed");
+		assertThat(dataBearing).extracting(DualStreamItem.RawFrame::data)
+			.containsExactly(CREATED, TEXT_DELTA, COMPLETED);
+
+		List<ChatResponse> typedResponses = items.stream()
+			.filter(DualStreamItem.TypedChunk.class::isInstance)
+			.map(item -> ((DualStreamItem.TypedChunk) item).response())
+			.toList();
+		assertThat(typedResponses).isNotEmpty();
+
+		ChatResponse contentResponse = typedResponses.stream()
+			.filter(r -> r.getResult() != null && StringUtils.hasText(r.getResult().getOutput().getText()))
+			.findFirst()
+			.orElseThrow(() -> new AssertionError("no typed chunk carried the assistant text"));
+		assertThat(contentResponse.getResult().getOutput().getText()).isEqualTo("Hello");
+
+		Usage usage = typedResponses.stream()
+			.map(r -> r.getMetadata().getUsage())
+			.filter(u -> u != null && u.getTotalTokens() != null && u.getTotalTokens() > 0)
+			.findFirst()
+			.orElseThrow(() -> new AssertionError("no typed chunk carried usage"));
+		assertThat(usage.getPromptTokens()).isEqualTo(9);
+		assertThat(usage.getCompletionTokens()).isEqualTo(12);
+		assertThat(usage.getTotalTokens()).isEqualTo(21);
+	}
+
 }

@@ -181,4 +181,108 @@ public class AnthropicChatModelStreamRawPassthroughTests {
 		verify(this.apiSpy, times(1)).chatCompletionStreamRawSse(anyString(), any());
 	}
 
+	/**
+	 * Regression test for enterprise-team-board#472: a comment-only SSE frame
+	 * ({@code : keepalive}, no {@code data:} field, so {@code data()} is null) in the
+	 * middle of the stream used to kill the whole shared stream, because the typed branch
+	 * mapped {@code ServerSentEvent::data} with Reactor {@code map}, which throws
+	 * {@code NullPointerException("The mapper [...] returned a null value.")} before any
+	 * downstream filter can drop the null. The typed branch must skip the frame and the
+	 * raw branch must still forward it (as a {@code RawFrame} with null data).
+	 */
+	@Test
+	void commentOnlyKeepaliveFrameDoesNotKillTheStream() {
+		ServerSentEvent<String> keepalive = ServerSentEvent.<String>builder().comment("keepalive").build();
+		assertThat(keepalive.data()).isNull();
+		setupChatModel(Flux.just(sse("message_start", MESSAGE_START), sse("ping", PING),
+				sse("content_block_start", CONTENT_BLOCK_START), keepalive,
+				sse("content_block_delta", CONTENT_BLOCK_DELTA), sse("content_block_stop", CONTENT_BLOCK_STOP),
+				sse("message_delta", MESSAGE_DELTA), sse("message_stop", MESSAGE_STOP)));
+
+		List<DualStreamItem> items = this.chatModel
+			.streamRawPassthrough(new Prompt("typed prompt"), "{\"max_tokens\":100,\"messages\":[]}")
+			.collectList()
+			.block();
+
+		assertDataLessFrameIsSkippedByTypedAndForwardedByRaw(items, 3);
+		assertThat(rawFrames(items).get(3).event()).isNull();
+	}
+
+	/**
+	 * Regression test for enterprise-team-board#472: an event-only SSE frame
+	 * ({@code event: ping} with no {@code data:} field, so {@code data()} is null -
+	 * unlike Anthropic's documented ping, which carries {@code data: {"type":"ping"}})
+	 * used to kill the whole shared stream through the Reactor {@code map} null-mapper
+	 * {@code NullPointerException} in the typed branch. The typed branch must skip the
+	 * frame and the raw branch must still forward it with its event name.
+	 */
+	@Test
+	void eventOnlyFrameWithoutDataDoesNotKillTheStream() {
+		ServerSentEvent<String> ping = ServerSentEvent.<String>builder().event("ping").build();
+		assertThat(ping.data()).isNull();
+		setupChatModel(Flux.just(sse("message_start", MESSAGE_START), sse("ping", PING),
+				sse("content_block_start", CONTENT_BLOCK_START), ping, sse("content_block_delta", CONTENT_BLOCK_DELTA),
+				sse("content_block_stop", CONTENT_BLOCK_STOP), sse("message_delta", MESSAGE_DELTA),
+				sse("message_stop", MESSAGE_STOP)));
+
+		List<DualStreamItem> items = this.chatModel
+			.streamRawPassthrough(new Prompt("typed prompt"), "{\"max_tokens\":100,\"messages\":[]}")
+			.collectList()
+			.block();
+
+		assertDataLessFrameIsSkippedByTypedAndForwardedByRaw(items, 3);
+		assertThat(rawFrames(items).get(3).event()).isEqualTo("ping");
+	}
+
+	private static List<DualStreamItem.RawFrame> rawFrames(List<DualStreamItem> items) {
+		return items.stream()
+			.filter(DualStreamItem.RawFrame.class::isInstance)
+			.map(DualStreamItem.RawFrame.class::cast)
+			.toList();
+	}
+
+	/**
+	 * Asserts the stream completed (we got here, so {@code block()} did not throw), the
+	 * RAW branch forwarded every frame in order - the data-less one at
+	 * {@code dataLessIndex} as a {@code RawFrame} with null data, which is the current,
+	 * unchanged behaviour of the raw branch - and the TYPED branch still produced the
+	 * same text and usage as the happy-path test.
+	 */
+	private static void assertDataLessFrameIsSkippedByTypedAndForwardedByRaw(List<DualStreamItem> items,
+			int dataLessIndex) {
+		assertThat(items).isNotEmpty();
+
+		List<DualStreamItem.RawFrame> rawFrames = rawFrames(items);
+		assertThat(rawFrames).hasSize(8);
+		assertThat(rawFrames.get(dataLessIndex).data()).isNull();
+		List<DualStreamItem.RawFrame> dataBearing = rawFrames.stream().filter(f -> f.data() != null).toList();
+		assertThat(dataBearing).extracting(DualStreamItem.RawFrame::event)
+			.containsExactly("message_start", "ping", "content_block_start", "content_block_delta",
+					"content_block_stop", "message_delta", "message_stop");
+		assertThat(dataBearing).extracting(DualStreamItem.RawFrame::data)
+			.containsExactly(MESSAGE_START, PING, CONTENT_BLOCK_START, CONTENT_BLOCK_DELTA, CONTENT_BLOCK_STOP,
+					MESSAGE_DELTA, MESSAGE_STOP);
+
+		List<ChatResponse> typedResponses = items.stream()
+			.filter(DualStreamItem.TypedChunk.class::isInstance)
+			.map(item -> ((DualStreamItem.TypedChunk) item).response())
+			.toList();
+		assertThat(typedResponses).isNotEmpty();
+
+		assertThat(typedResponses.stream()
+			.anyMatch(r -> r.getResult() != null && r.getResult().getOutput().getText() != null
+					&& r.getResult().getOutput().getText().contains("Hello there")))
+			.isTrue();
+
+		ChatResponse lastWithUsage = typedResponses.stream()
+			.filter(r -> r.getMetadata() != null && r.getMetadata().getUsage() != null
+					&& r.getMetadata().getUsage().getCompletionTokens() != null
+					&& r.getMetadata().getUsage().getCompletionTokens() == 12)
+			.reduce((first, second) -> second)
+			.orElseThrow(() -> new AssertionError("no typed chunk carried the final usage"));
+		Usage usage = lastWithUsage.getMetadata().getUsage();
+		assertThat(usage.getPromptTokens()).isEqualTo(9);
+		assertThat(usage.getCompletionTokens()).isEqualTo(12);
+	}
+
 }
